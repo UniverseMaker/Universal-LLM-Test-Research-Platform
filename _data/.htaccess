@@ -1,0 +1,8 @@
+# _data/ — DB 데이터 파일(SQLite 등) 보관. 웹 접근 전면 차단.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>LLM Lab — 프로젝트 케이스 스터디</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --paper:#0e1016; --surface:#161922; --surface-2:#1d212c;
+    --ink:#e7e9f1; --ink-soft:#aab0c1; --faint:#6d7488;
+    --border:#272c39; --border-strong:#353b4b;
+    --accent:#9d86f5; --accent-bg:rgba(157,134,245,.14); --accent-line:rgba(157,134,245,.34);
+    --amber:#e0954a; --teal:#3ec2be; --good:#3ec489;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 16px 40px -16px rgba(0,0,0,.6);
+    --measure:72ch;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%; scroll-behavior:smooth;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:17px; line-height:1.72; letter-spacing:-.003em; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px; margin:0 auto; padding:0 24px;}
+  header.top{padding:88px 0 40px; border-bottom:2px solid var(--ink);}
+  .eyebrow{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); display:flex; align-items:center; gap:12px;}
+  .eyebrow::after{content:""; height:1px; flex:1; background:var(--border-strong);}
+  h1{font-family:"Spectral",serif; font-weight:700; font-size:clamp(2.6rem,7vw,4.4rem); line-height:1.02; letter-spacing:-.022em; margin:.3em 0 .3em; text-wrap:balance;}
+  h1 .a{color:var(--accent);}
+  .dek{font-size:1.22rem; line-height:1.6; color:var(--ink-soft); max-width:60ch; margin:0;}
+  .meta{margin-top:28px; display:flex; flex-wrap:wrap; gap:10px 22px; font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--faint);}
+  .meta b{color:var(--ink-soft); font-weight:500;}
+  main{padding:8px 0 100px;}
+  section{padding:46px 0; border-bottom:1px solid var(--border);}
+  .kicker{font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--accent);}
+  h2{font-family:"Spectral",serif; font-weight:600; font-size:2rem; line-height:1.14; letter-spacing:-.016em; margin:.25em 0 .6em; text-wrap:balance;}
+  h3{font-family:"Spectral",serif; font-weight:600; font-size:1.28rem; margin:1.8em 0 .5em;}
+  p{margin:0 0 1.05em; max-width:var(--measure);}
+  strong{font-weight:600;} em{font-style:italic; color:var(--ink);}
+  a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-line);}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.9em; background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:.08em .38em;}
+  ul.body,ol.body{max-width:var(--measure); padding-left:22px; margin:0 0 1.05em;}
+  ul.body li,ol.body li{margin-bottom:.5em;}
+  .abstract{background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:10px; padding:22px 26px; box-shadow:var(--shadow); margin:34px 0 8px;}
+  .abstract .lab{font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:8px;}
+  .abstract p{margin:0 0 .6em; max-width:none;}
+  .abstract p:last-child{margin-bottom:0;}
+  .abstract .en{color:var(--ink-soft); font-size:.97rem;}
+  figure{margin:30px 0; max-width:var(--measure);}
+  figure img{width:100%; height:auto; display:block; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); background:var(--surface-2);}
+  figure.wide{max-width:none;}
+  figcaption{font-size:.9rem; color:var(--faint); margin-top:12px; font-family:"IBM Plex Mono",monospace;}
+  .imgph{width:100%; aspect-ratio:16/9; border:1px dashed var(--border-strong); border-radius:12px; background:repeating-linear-gradient(135deg,var(--surface) 0 12px,var(--surface-2) 12px 24px); display:flex; align-items:center; justify-content:center; color:var(--faint); font-family:"IBM Plex Mono",monospace; font-size:13px; text-align:center; padding:20px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:26px 0; max-width:var(--measure);}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr;}}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 22px; box-shadow:var(--shadow);}
+  .card .cn{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+  .card h4{margin:5px 0 6px; font-size:1.05rem;}
+  .card p{margin:0; font-size:.93rem; color:var(--ink-soft); max-width:none;}
+  .pills{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; max-width:var(--measure);}
+  .pill{font-family:"IBM Plex Mono",monospace; font-size:12px; padding:5px 12px; border-radius:20px; background:var(--surface-2); border:1px solid var(--border); color:var(--ink-soft);}
+  .note{background:var(--surface-2); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:10px; padding:16px 20px; margin:22px 0; max-width:var(--measure); font-size:.97rem; color:var(--ink-soft);}
+  .note .lab{font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:6px;}
+  .feat{display:flex; gap:16px; padding:18px 0; border-bottom:1px solid var(--border); max-width:var(--measure);}
+  .feat:last-child{border-bottom:none;}
+  .feat .ic{font-size:1.5rem; flex:none; width:36px; text-align:center;}
+  .feat h4{margin:0 0 4px; font-size:1.06rem;}
+  .feat p{margin:0; font-size:.95rem; color:var(--ink-soft); max-width:none;}
+  .timeline{max-width:var(--measure); margin:20px 0;}
+  .tl{display:flex; gap:16px; padding:10px 0;}
+  .tl .n{font-family:"IBM Plex Mono",monospace; color:var(--accent); font-weight:600; flex:none; width:2.2em;}
+  .tl .t{color:var(--ink-soft); font-size:.96rem;}
+  footer{padding:44px 0 70px; color:var(--faint); font-family:"IBM Plex Mono",monospace; font-size:12px; text-align:center; line-height:1.8;}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Project Case Study · 2026</div>
+    <h1>LLM Lab<br><span class="a">범용 LLM 테스트·연구 플랫폼</span></h1>
+    <p class="dek">어떤 OpenAI 호환 LLM API든 연결해, 채팅부터 RAG·프롬프트 체이닝·에이전트·평가·시뮬레이션까지 브라우저 하나로 실험하는 엔지니어용 워크벤치.</p>
+    <div class="meta">
+      <span><b>유형</b> 개인 프로젝트 · 웹 애플리케이션</span>
+      <span><b>역할</b> 기획 · 설계 · 프론트엔드 · 백엔드</span>
+      <span><b>스택</b> Vanilla JS · PHP · vLLM</span>
+      <span><b>상태</b> 배포 · 오픈소스(MIT)</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="abstract">
+      <div class="lab">한 줄 요약 · Abstract</div>
+      <p>LLM Lab은 <strong>“이 모델 서버가 실제로 동작하는가, 그리고 고급 기법이 내 모델 위에서 어떻게 동작하는가”</strong>를 한 화면에서 확인하게 해주는, 빌드·프레임워크·계정이 필요 없는 순수 프론트엔드 연구 콘솔이다.</p>
+      <p class="en">LLM Lab is a build‑free, framework‑free, account‑free frontend console that lets engineers answer two questions in one place: <em>“does this model endpoint actually work?”</em> and <em>“how do advanced techniques (RAG, chaining, agents, eval) behave on my own model?”</em> — with every request fully inspectable.</p>
+    </div>
+
+    <section>
+      <div class="kicker">01 · 배경과 문제의식</div>
+      <h2>왜 이걸 만들었나</h2>
+      <p>사내·연구용으로 LLM 추론 서버(vLLM 등)를 세우고 나면 반복적으로 부딪히는 질문이 있다. <strong>“이 엔드포인트가 제대로 응답하나? 스트리밍은? 토큰 속도는? reasoning은 오나?”</strong> 이걸 확인하는 방법은 대개 셋 중 하나였다.</p>
+      <ul class="body">
+        <li>흩어진 <code>curl</code> 명령 — 스트리밍·헤더·usage를 눈으로 읽기 불편하고 재현이 안 됨.</li>
+        <li>일회용 파이썬 스크립트 — 매번 다시 짜고, 팀과 공유가 어려움.</li>
+        <li>특정 벤더를 전제한 무거운 플랫폼 — 내가 직접 운영하는 임의의 OpenAI 호환 엔드포인트엔 안 맞음.</li>
+      </ul>
+      <p>게다가 검증은 “응답이 오나”에서 끝나지 않는다. 실제로는 <strong>RAG(하이브리드 검색), 프롬프트 체이닝, 에이전트, 평가</strong> 같은 고급 파이프라인이 <em>바로 그 모델</em> 위에서 어떻게 동작하는지가 궁금하다. 그런데 이런 실험을 하려면 또 별도의 프레임워크와 인프라가 필요했다.</p>
+      <div class="note"><div class="lab">문제 정의</div>“임의의 OpenAI 호환 LLM 엔드포인트를, <strong>설치·빌드·계정 없이</strong> 연결해서, <strong>채팅부터 고급 RAG/체인/에이전트/평가까지</strong> 한 화면에서 돌려 보고, <strong>무엇이 오갔는지 완전히 투명하게</strong> 확인할 수 있는 도구가 없다.”</div>
+    </section>
+
+    <section>
+      <div class="kicker">02 · 목표</div>
+      <h2>이 플랫폼이 지향하는 것</h2>
+      <div class="grid2">
+        <div class="card"><div class="cn">Universal</div><h4>어떤 모델이든</h4><p>하드코딩된 모델 없이, 사용자가 연결 프로필로 임의의 OpenAI 호환 서버를 붙인다.</p></div>
+        <div class="card"><div class="cn">Zero‑friction</div><h4>설치·빌드 없음</h4><p>순수 HTML/CSS/JS. 정적 호스트에 파일만 올리면 끝. <code>file://</code>로도 열린다.</p></div>
+        <div class="card"><div class="cn">Deep</div><h4>연구급 기능</h4><p>단순 채팅을 넘어 하이브리드 RAG·체이닝 20종·ReAct 에이전트·A/B 평가·시뮬레이션.</p></div>
+        <div class="card"><div class="cn">Transparent</div><h4>완전한 가시성</h4><p>요청 URL·헤더·본문·스트림·타이밍·토큰을 메시지별로 인스펙터에 노출.</p></div>
+      </div>
+      <p>핵심 가치는 <strong>“Bring‑Your‑Own‑Everything”</strong>과 <strong>투명성</strong>이다. 벤더를 가정하지 않고, 사용자의 키·엔드포인트·데이터는 브라우저에만 머물며, 도구가 브라우저 밖으로 내보낸 것을 하나도 숨기지 않는다.</p>
+    </section>
+
+    <section>
+      <div class="kicker">03 · 대상 사용자</div>
+      <h2>누구를 위한 것인가</h2>
+      <ul class="body">
+        <li><strong>LLM 인프라 엔지니어</strong> — 자체 호스팅한 vLLM/TGI 엔드포인트의 동작·성능(TTFT, tok/s)을 즉시 검증.</li>
+        <li><strong>AI 연구자</strong> — RAG 융합(RRF)·프롬프트 체이닝·에이전트 패턴을 자기 모델에서 재현·비교.</li>
+        <li><strong>프롬프트/제품 개발자</strong> — A/B·judge로 프롬프트·모델을 정량 비교하고, 인스펙터로 실제 페이로드를 학습.</li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="kicker">04 · 핵심 기능</div>
+      <h2>무엇을 할 수 있나</h2>
+
+      <figure class="wide">
+        <img src="images/hero-chat.png" alt="연결된 모델과의 실제 채팅" onerror="this.outerHTML='&lt;div class=\'imgph\'&gt;images/hero-chat.png — 연결된 모델과의 실제 채팅 화면&lt;/div&gt;'">
+        <figcaption>Chat 워크벤치 — 연결된 모델과의 멀티턴 대화, 메시지별 모델 뱃지</figcaption>
+      </figure>
+
+      <div class="feat"><div class="ic">💬</div><div><h4>Chat — 멀티 세션 대화</h4><p>모델을 바꿔가며 대화, ChatGPT식 다중 세션, 메시지별 “어떤 모델·도메인으로 답했는지” 뱃지, 스트리밍·reasoning 표시.</p></div></div>
+      <div class="feat"><div class="ic">🔎</div><div><h4>RAG Lab — 하이브리드 검색</h4><p>BM25(렉시컬)·Dense(임베딩)·RRF(상호 순위 융합) 하이브리드·GraphRAG 뷰어. 청킹·검색·인용 답변을 실측.</p></div></div>
+      <div class="feat"><div class="ic">⛓️</div><div><h4>Chain — 프롬프트 체이닝</h4><p><code>llm/condition/transform/output</code> 스텝으로 워크플로 구성. CoT·Self‑Refine·CoVe·Map‑Reduce·분류라우팅 등 <strong>프리셋 20종</strong> 내장.</p></div></div>
+      <div class="feat"><div class="ic">🤖</div><div><h4>Agent — ReAct 도구 호출</h4><p>Thought → Action → Observation 루프로 도구를 호출하는 에이전트, 단계별 트레이스.</p></div></div>
+      <div class="feat"><div class="ic">📊</div><div><h4>Eval — 정량 비교</h4><p>A/B, N회 반복 변동성, 단어 단위 diff, LLM‑as‑judge 채점.</p></div></div>
+      <div class="feat"><div class="ic">🩺</div><div><h4>Inspector — 완전한 가시성</h4><p>요청/응답/타이밍(TTFT·tok/s)/토큰 사용량 + <code>curl</code>·Python·<code>fetch</code> 재현 스니펫. 메시지별 귀속.</p></div></div>
+
+      <div class="grid2">
+        <figure><img src="images/rag.png" alt="RAG Lab 하이브리드 검색" onerror="this.outerHTML='&lt;div class=\'imgph\'&gt;images/rag.png — RAG Lab (BM25+Dense+RRF)&lt;/div&gt;'"><figcaption>RAG Lab — 하이브리드 검색과 RRF 융합</figcaption></figure>
+        <figure><img src="images/chain.png" alt="프롬프트 체이닝" onerror="this.outerHTML='&lt;div class=\'imgph\'&gt;images/chain.png — Chain 프리셋 실행&lt;/div&gt;'"><figcaption>Chain — 프리셋 스텝과 실행 트레이스</figcaption></figure>
+        <figure><img src="images/inspector.png" alt="요청 인스펙터" onerror="this.outerHTML='&lt;div class=\'imgph\'&gt;images/inspector.png — 요청 인스펙터&lt;/div&gt;'"><figcaption>Inspector — 실제 요청 URL·본문·타이밍</figcaption></figure>
+        <figure><img src="images/agent.png" alt="에이전트" onerror="this.outerHTML='&lt;div class=\'imgph\'&gt;images/agent.png — Agent ReAct 루프&lt;/div&gt;'"><figcaption>Agent — Thought/Action/Observation</figcaption></figure>
+      </div>
+    </section>
+
+    <section>
+      <div class="kicker">05 · 아키텍처와 기술 선택</div>
+      <h2>어떻게 만들었나</h2>
+      <p>가장 중요한 결정은 <strong>“프레임워크·빌드 없는 순수 프론트엔드”</strong>였다. 이유는 명확하다 — 이 도구의 사용자는 인프라 엔지니어이고, 그들이 원하는 건 <em>어떤 서버에든 파일만 올리면 즉시 뜨는</em> 것이다. 번들러·Node·CI가 끼면 “테스트 도구를 쓰기 위해 빌드 파이프라인을 세워야 하는” 모순이 생긴다.</p>
+      <div class="pills">
+        <span class="pill">Vanilla HTML/CSS/JS</span><span class="pill">IIFE modules · window.*</span><span class="pill">no bundler</span><span class="pill">runs from file://</span><span class="pill">PHP (PDO·cURL)</span><span class="pill">vLLM / OpenAI‑compatible</span><span class="pill">SSE streaming</span>
+      </div>
+      <h3>계층 구조</h3>
+      <ul class="body">
+        <li><strong>엔진</strong>(<code>llmlab.js</code>) — 연결 프로필 관리 + 커널(요청·스트림·인스펙트). 모든 워크벤치가 이 커널을 공유.</li>
+        <li><strong>능력 어댑터</strong>(<code>rag-chain.js</code>, <code>agent-eval-sim.js</code>) — RAG·Chain·Agent·Eval·Simulate를 엔진 위에 “추가”로 얹음.</li>
+        <li><strong>선택 백엔드</strong>(PHP) — <code>proxy.php</code>(CORS 회피·SSE 릴레이), <code>search.php</code>(웹 검색), <code>db/</code>(RDB·pgvector·Neo4j). 공유호스팅(장기 프로세스 불가)에 맞춰 <em>요청당 처리</em>로 설계.</li>
+      </ul>
+      <div class="note"><div class="lab">배포 유연성</div>백엔드가 없으면 앱이 자동으로 <strong>브라우저 직접 호출로 폴백</strong>한다. 즉 GitHub Pages 같은 순수 정적 호스트에서도 동작하고, PHP 호스트에 올리면 프록시·실DB가 켜진다. 하나의 코드베이스가 두 배포 모드를 모두 지원.</div>
+    </section>
+
+    <section>
+      <div class="kicker">06 · 설계 결정과 트레이드오프</div>
+      <h2>까다로웠던 지점들</h2>
+      <div class="grid2">
+        <div class="card"><div class="cn">Transparency</div><h4>메시지별 인스펙터</h4><p>전역 “마지막 요청” 하나가 아니라, 각 메시지가 자기 요청 스냅샷을 소유. 모델을 바꿔가며 대화해도 각 답변이 실제로 어느 도메인·모델로 갔는지 추적된다.</p></div>
+        <div class="card"><div class="cn">Retrieval</div><h4>RRF 하이브리드</h4><p>렉시컬·시맨틱을 점수 정규화 없이 순위만으로 합치는 RRF(k=60)를 기본으로, 이질적 검색기를 안정적으로 융합.</p></div>
+        <div class="card"><div class="cn">Deploy</div><h4>런타임 캐시버스팅</h4><p>index.html이 로컬 에셋을 <code>?t=Date.now()</code>로 로드 → 파일만 덮어써도 새로고침 시 항상 최신본. 배포 후 “반영 안 됨” 문제를 근본 차단.</p></div>
+        <div class="card"><div class="cn">Robustness</div><h4>Graceful degradation</h4><p>PHP 확장(pgvector·Neo4j 드라이버)이 없으면 크래시 대신 “무엇이 가능한지”를 보고. 데모 SQLite로 무설정 체험.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="kicker">07 · 성과와 배운 점</div>
+      <h2>결과</h2>
+      <ul class="body">
+        <li><strong>한 화면 검증</strong> — 엔드포인트 연결부터 TTFT·tok/s·usage 확인, 고급 파이프라인 실험까지 도구 전환 없이 완결.</li>
+        <li><strong>이식성</strong> — 빌드 없는 단일 코드베이스가 정적/PHP 두 배포 모드를 모두 커버.</li>
+        <li><strong>재사용성</strong> — 연결 프로필 import/export로 팀이 엔드포인트 설정을 공유.</li>
+        <li><strong>안전한 공개</strong> — 키·엔드포인트를 코드에서 분리(브라우저 localStorage 전용)해 오픈소스로 배포 가능.</li>
+      </ul>
+      <h3>배운 점</h3>
+      <p>브라우저에서 <strong>SSE 스트리밍 릴레이</strong>, <strong>혼합콘텐츠·CORS의 실제 제약</strong>, <strong>flexbox 스크롤·캐시 계층</strong> 같은 “배포에서만 드러나는” 문제들을 다루며, <em>테스트 도구 자체가 가장 현실적인 통합 테스트</em>가 된다는 걸 확인했다.</p>
+    </section>
+
+    <section>
+      <div class="kicker">08 · 링크</div>
+      <h2>더 보기</h2>
+      <ul class="body">
+        <li>저장소 · <code>README.md</code> — 설치·연결·배포 가이드(한/영)</li>
+        <li><code>docs/API_프로필_형식_가이드.md</code> — 연결 프로필 JSON 형식 정본</li>
+        <li><code>docs/LLM_Lab_학습노트.html</code> — RAG·RRF·GraphRAG·체이닝·에이전트 통합 학습 노트</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>LLM Lab — Universal LLM Test &amp; Research Platform · Case Study · 2026</footer>
+</div>
+</body>
+</html>

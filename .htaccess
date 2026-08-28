@@ -1,0 +1,81 @@
+# LLM Lab v30 — 공유호스팅 PHP 백엔드 라우팅 & 보안 (Apache)
+# server.py(Python 상주 프록시)를 요청당 실행 PHP 로 대체.
+# 프런트가 부르는 경로(/api/proxy, /api/search, /api/db/*)를 그대로 매핑 → 프런트 무수정.
+
+# ------------------------------------------------------------------ #
+# 1. API 라우팅 (mod_rewrite)                                         #
+# ------------------------------------------------------------------ #
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 앱이 서브디렉터리에 설치된 경우를 대비해 RewriteBase 자동 추정은 생략.
+  # 이미 존재하는 실제 파일/디렉터리는 그대로 서빙(정적 자산).
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # LLM 릴레이 프록시 (POST) — 업스트림 status/headers 미러링 + SSE 통과
+  RewriteRule ^api/proxy/?$   proxy.php   [L]
+
+  # 웹 검색 (GET ?q=&n=) — 쿼리스트링 유지(QSA)
+  RewriteRule ^api/search/?$  search.php  [L,QSA]
+
+  # DB REST — /api/db/<op> → db/router.php?op=<op>  (op 에 '/' 허용: vector/search, graph/query)
+  RewriteRule ^api/db/([A-Za-z0-9_/-]+)/?$  db/router.php?op=$1  [L,QSA]
+</IfModule>
+
+# ------------------------------------------------------------------ #
+# 2. 민감 파일 웹 접근 차단 (자격증명/저장소)                         #
+#    - config.secret.php : DB 비밀. 직접 GET 차단(설령 실행돼도 배열만 반환).
+#    - connections.json  : 연결 메타(비밀 제외지만 방어적 차단).
+#    - *.sqlite/.db/.sql  : 데이터 파일 노출 차단.
+#    - _bootstrap.php     : 인클루드 전용(직접 접근 차단).
+# ------------------------------------------------------------------ #
+<FilesMatch "^(config\.secret\.php|connections\.json|_bootstrap\.php)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+<FilesMatch "\.(sqlite|sqlite3|db|sql)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# 데이터 디렉터리 전체 차단(존재 시)
+<IfModule mod_alias.c>
+  RedirectMatch 404 (?i)/_data/.*\.(sqlite|sqlite3|db|sql)$
+</IfModule>
+
+# ------------------------------------------------------------------ #
+# 3. 기본값                                                           #
+# ------------------------------------------------------------------ #
+DirectoryIndex index.html
+
+# 디렉터리 목록 노출 방지
+<IfModule mod_autoindex.c>
+  Options -Indexes
+</IfModule>
+
+# ------------------------------------------------------------------ #
+# 4. 캐시 무효화 — 새로고침 시 항상 최신본 (mod_headers 있을 때만)     #
+#    html/js/css/json 을 매번 재검증하도록 강제. index.html 셸이       #
+#    강하게 캐시돼 옛 ?t 부트스트랩을 쓰는 상황을 서버단에서 차단.     #
+#    (mod_headers 부재 시 IfModule 로 무시 → 500 방지)                 #
+# ------------------------------------------------------------------ #
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js|css|json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>

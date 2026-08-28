@@ -1,0 +1,44 @@
+# ── Secrets & local data (never commit) ────────────────────────────
+db/config.secret.php
+db/connections.json
+db/_data/*.sqlite
+db/_data/*.db
+db/_data/*.sql
+*.key
+*.pem
+.env
+.env.*
+
+# Keep the demo DB and the example config
+!_data/demo.sqlite
+!db/config.secret.php.example
+!db/example-connections.json
+
+# ── AI assistant / tooling artifacts (do not publish) ──────────────
+CLAUDE.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
+_workspace/
+**/_workspace/
+
+# ── OS / editor junk ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.stackdump
+*~
+.idea/
+.vscode/
+
+# ── Python cache ───────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ── Logs ───────────────────────────────────────────────────────────
+*.log

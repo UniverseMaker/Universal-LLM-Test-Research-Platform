@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1",
+  "type": "llm-lab-db-connections",
+  "exportedAt": "2026-08-27T00:00:00Z",
+  "note": "DB 연결 프로필 Import 예시. 무설치 체험은 sqlite(demo) 하나면 충분. password 는 Import 후 서버에 보관되며 export 시 <REDACTED>.",
+  "connections": [
+    {
+      "schemaVersion": "1",
+      "kind": "db-connection",
+      "id": "db_sqlite_demo",
+      "label": "SQLite 데모 (무설치 · 즉시 실동작)",
+      "type": "sqlite",
+      "network": "local",
+      "connection": { "db_path": "_data/demo.sqlite" },
+      "options": { "readonly": true, "row_cap": 200 },
+      "notes": [
+        "PDO_sqlite 는 공유호스팅에 거의 항상 탑재 → 즉시 실 DB 쿼리 시연.",
+        "파일이 없으면 /api/db/test 또는 /api/db/seed 가 자동 생성·시드(docs 5행)."
+      ]
+    },
+    {
+      "schemaVersion": "1",
+      "kind": "db-connection",
+      "id": "db_mysql_app",
+      "label": "MySQL (호스팅 계정 내 DB)",
+      "type": "mysql",
+      "network": "local",
+      "connection": { "host": "localhost", "port": 3306, "database": "app_db", "user": "app_ro", "password": "<secret>" },
+      "options": { "readonly": true, "connect_timeout_ms": 10000, "row_cap": 200 },
+      "notes": ["읽기전용 계정 권장. 공유호스팅은 보통 계정 내 MySQL 만 접근 허용."]
+    },
+    {
+      "schemaVersion": "1",
+      "kind": "db-connection",
+      "id": "db_pg_main",
+      "label": "PostgreSQL + pgvector (연구 코퍼스)",
+      "type": "pgvector",
+      "network": "external",
+      "connection": { "host": "db.example.com", "port": 5432, "database": "ragdb", "user": "rag_ro", "password": "<secret>", "tls": { "enabled": true, "mode": "require", "verify": false } },
+      "options": { "readonly": true, "connect_timeout_ms": 10000, "statement_timeout_ms": 15000, "row_cap": 200 },
+      "vector": { "table": "chunks", "id_column": "id", "text_column": "text", "embedding_column": "embedding", "metadata_columns": ["doc_id", "title", "loc"], "dim": 384, "metric": "cosine", "index": "hnsw" },
+      "notes": [
+        "pdo_pgsql 미탑재 호스팅에서는 mock 강등.",
+        "DB 측 'CREATE EXTENSION vector;' + 벡터 테이블 사전 준비 필요.",
+        "쿼리 임베딩은 프런트가 /v1/embeddings(384d)로 생성해 전달."
+      ]
+    },
+    {
+      "schemaVersion": "1",
+      "kind": "db-connection",
+      "id": "db_neo4j_1",
+      "label": "Neo4j GraphRAG (HTTP API)",
+      "type": "neo4j",
+      "network": "external",
+      "connection": { "host": "graph.example.com", "port": 7473, "database": "neo4j", "user": "neo4j", "password": "<secret>", "tls": { "enabled": true, "verify": false }, "uri": "https://graph.example.com:7473" },
+      "graph": { "database": "neo4j", "entity_label": "Entity", "community_label": "Community", "rel_types": ["RELATED", "WORKS_WITH"], "name_property": "name", "summary_property": "summary" },
+      "options": { "readonly": true },
+      "notes": ["Bolt 확장 불요 — Transactional Cypher HTTP API(/db/{db}/tx/commit) 사용.", "7474=HTTP, 7473=HTTPS. 방화벽 도달성 확인 필요."]
+    }
+  ]
+}
