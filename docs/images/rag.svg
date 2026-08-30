@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 760" width="1280" height="760" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+<rect x="0" y="0" width="1280" height="760" rx="0" fill="#0e1016"/>
+<rect x="0" y="0" width="232" height="760" rx="0" fill="#12151d"/>
+<line x1="232" y1="0" x2="232" y2="760" stroke="#272c39" stroke-width="1"/>
+<rect x="20" y="22" width="26" height="26" rx="6" fill="#0b0e14" stroke="#333a4b" stroke-width="1"/>
+<g stroke="#5a97ff" stroke-width="1.8" fill="none" stroke-linecap="round">
+<path d="M28 29H26v12h2M40 29h2v12h-2"/><path d="M29.5 38h5"/></g>
+<text x="56" y="34" font-size="15" fill="#e7e9f1" font-weight="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">LLM Lab</text>
+<text x="56" y="47" font-size="8.5" fill="#6d7488" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.02em">Universal LLM Test &amp; Research</text>
+<text x="24" y="99" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">💬</text>
+<text x="46" y="99" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chat</text>
+<rect x="12" y="116" width="208" height="32" rx="8" fill="#16233d"/>
+<text x="24" y="137" font-size="13" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">🔎</text>
+<text x="46" y="137" font-size="13.5" fill="#e7e9f1" font-weight="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">RAG Lab</text>
+<text x="24" y="175" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">⛓</text>
+<text x="46" y="175" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chain</text>
+<text x="24" y="213" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">🤖</text>
+<text x="46" y="213" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Agent</text>
+<text x="24" y="251" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">📊</text>
+<text x="46" y="251" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Eval</text>
+<text x="24" y="289" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">🎭</text>
+<text x="46" y="289" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Simulate</text>
+<line x1="16" y1="312" x2="216" y2="312" stroke="#272c39" stroke-width="1"/>
+<text x="20" y="334" font-size="10" fill="#6d7488" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.12em">CHATS</text>
+<rect x="160" y="322" width="56" height="18" rx="5" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<text x="188" y="335" font-size="9.5" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle">+ New</text>
+<rect x="12" y="350" width="208" height="34" rx="7" fill="#1d212c"/>
+<text x="24" y="365" font-size="11.5" fill="#e7e9f1" font-weight="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chat with your-model</text>
+<text x="24" y="378" font-size="9" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">streaming · just now</text>
+<text x="24" y="405" font-size="11.5" fill="#aab0c1" font-weight="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">RAG eval run</text>
+<text x="24" y="418" font-size="9" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">streaming · just now</text>
+<text x="24" y="445" font-size="11.5" fill="#aab0c1" font-weight="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Agent tool test</text>
+<text x="24" y="458" font-size="9" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">streaming · just now</text>
+<rect x="232" y="0" width="1048" height="52" rx="0" fill="#0e1016"/>
+<line x1="232" y1="52" x2="1280" y2="52" stroke="#272c39" stroke-width="1"/>
+<rect x="252" y="13" width="190" height="26" rx="13.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<circle cx="268" cy="26" r="4" fill="#3ec489"/>
+<text x="280" y="30" font-size="11" fill="#e7e9f1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">My vLLM · your-model</text>
+<rect x="452" y="13" width="150" height="26" rx="13.0" fill="#161922" stroke="#333a4b" stroke-width="1"/>
+<text x="466" y="30" font-size="11" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">your-model</text>
+<text x="590" y="30" font-size="10" fill="#6d7488" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">▾</text>
+<rect x="1130" y="13" width="130" height="26" rx="13.0" fill="#161922" stroke="#333a4b" stroke-width="1"/>
+<text x="1145" y="30" font-size="11" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">🩺 Inspector</text>
+<text x="272" y="84" font-size="20" fill="#e7e9f1" font-weight="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">RAG Lab</text>
+<text x="367" y="84" font-size="11" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">hybrid retrieval · BM25 + Dense + RRF</text>
+<rect x="272" y="100" width="760" height="36" rx="9" fill="#161922" stroke="#272c39" stroke-width="1"/>
+<text x="286" y="123" font-size="12" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">query: &quot;파이썬 리스트 중복 제거&quot;</text>
+<rect x="832" y="106" width="64" height="24" rx="12.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<text x="864" y="122" font-size="10.5" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle">bm25</text>
+<rect x="902" y="106" width="64" height="24" rx="12.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<text x="934" y="122" font-size="10.5" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle">dense</text>
+<rect x="972" y="106" width="64" height="24" rx="12.0" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="1004" y="122" font-size="10.5" fill="#5a97ff" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle">hybrid</text>
+<rect x="272" y="154" width="228" height="236" rx="12" fill="#161922" stroke="#272c39" stroke-width="1"/>
+<text x="386.0" y="178" font-size="11" fill="#e0954a" font-weight="700" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">BM25</text>
+<rect x="284" y="194" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="296" y="214" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">1</text>
+<rect x="310" y="205" width="7" height="7" rx="2" fill="#e0954a"/>
+<text x="326" y="214" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 A</text>
+<text x="476" y="214" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">1</text>
+<rect x="284" y="232" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="296" y="252" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">2</text>
+<rect x="310" y="243" width="7" height="7" rx="2" fill="#e0954a"/>
+<text x="326" y="252" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 B</text>
+<text x="476" y="252" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">2</text>
+<rect x="284" y="270" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="296" y="290" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">3</text>
+<rect x="310" y="281" width="7" height="7" rx="2" fill="#e0954a"/>
+<text x="326" y="290" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 C</text>
+<text x="476" y="290" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">3</text>
+<rect x="284" y="308" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="296" y="328" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">4</text>
+<rect x="310" y="319" width="7" height="7" rx="2" fill="#e0954a"/>
+<text x="326" y="328" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 D</text>
+<text x="476" y="328" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">4</text>
+<rect x="284" y="346" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="296" y="366" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">5</text>
+<rect x="310" y="357" width="7" height="7" rx="2" fill="#e0954a"/>
+<text x="326" y="366" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 E</text>
+<text x="476" y="366" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">5</text>
+<rect x="518" y="154" width="228" height="236" rx="12" fill="#161922" stroke="#272c39" stroke-width="1"/>
+<text x="632.0" y="178" font-size="11" fill="#3ec2be" font-weight="700" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">Dense</text>
+<rect x="530" y="194" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="542" y="214" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">1</text>
+<rect x="556" y="205" width="7" height="7" rx="2" fill="#3ec2be"/>
+<text x="572" y="214" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 C</text>
+<text x="722" y="214" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">1</text>
+<rect x="530" y="232" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="542" y="252" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">2</text>
+<rect x="556" y="243" width="7" height="7" rx="2" fill="#3ec2be"/>
+<text x="572" y="252" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 A</text>
+<text x="722" y="252" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">2</text>
+<rect x="530" y="270" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="542" y="290" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">3</text>
+<rect x="556" y="281" width="7" height="7" rx="2" fill="#3ec2be"/>
+<text x="572" y="290" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 E</text>
+<text x="722" y="290" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">3</text>
+<rect x="530" y="308" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="542" y="328" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">4</text>
+<rect x="556" y="319" width="7" height="7" rx="2" fill="#3ec2be"/>
+<text x="572" y="328" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 B</text>
+<text x="722" y="328" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">4</text>
+<rect x="530" y="346" width="204" height="30" rx="7" fill="#1d212c" stroke="#272c39" stroke-width="1"/>
+<text x="542" y="366" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">5</text>
+<rect x="556" y="357" width="7" height="7" rx="2" fill="#3ec2be"/>
+<text x="572" y="366" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 D</text>
+<text x="722" y="366" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">5</text>
+<rect x="764" y="154" width="228" height="236" rx="12" fill="#161922" stroke="#333a4b" stroke-width="1"/>
+<text x="878.0" y="178" font-size="11" fill="#5a97ff" font-weight="700" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">RRF</text>
+<rect x="776" y="194" width="204" height="30" rx="7" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="788" y="214" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">1</text>
+<rect x="802" y="205" width="7" height="7" rx="2" fill="#5a97ff"/>
+<text x="818" y="214" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 A</text>
+<text x="968" y="214" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">.0325</text>
+<rect x="776" y="232" width="204" height="30" rx="7" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="788" y="252" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">2</text>
+<rect x="802" y="243" width="7" height="7" rx="2" fill="#5a97ff"/>
+<text x="818" y="252" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 C</text>
+<text x="968" y="252" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">.0323</text>
+<rect x="776" y="270" width="204" height="30" rx="7" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="788" y="290" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">3</text>
+<rect x="802" y="281" width="7" height="7" rx="2" fill="#5a97ff"/>
+<text x="818" y="290" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 B</text>
+<text x="968" y="290" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">.0318</text>
+<rect x="776" y="308" width="204" height="30" rx="7" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="788" y="328" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">4</text>
+<rect x="802" y="319" width="7" height="7" rx="2" fill="#5a97ff"/>
+<text x="818" y="328" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 E</text>
+<text x="968" y="328" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">.0313</text>
+<rect x="776" y="346" width="204" height="30" rx="7" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="788" y="366" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">5</text>
+<rect x="802" y="357" width="7" height="7" rx="2" fill="#5a97ff"/>
+<text x="818" y="366" font-size="11.5" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 D</text>
+<text x="968" y="366" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="end">.0310</text>
+<rect x="272" y="406" width="760" height="314" rx="12" fill="#161922" stroke="#272c39" stroke-width="1"/>
+<text x="288" y="430" font-size="9.5" fill="#6d7488" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.1em">ANSWER (grounded)</text>
+<text x="288" y="454" font-size="12" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">dict.fromkeys()로 순서를 유지하며 중복 제거가 가능합니다 [문서 A].</text>
+<text x="288" y="474" font-size="12" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">set()은 더 빠르지만 순서를 잃습니다 [문서 C]. 대용량에서는</text>
+<text x="288" y="494" font-size="12" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">제너레이터와 결합해 메모리를 절약하세요 [문서 B].</text>
+<rect x="288" y="524" width="240" height="24" rx="12.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<circle cx="302" cy="536" r="7" fill="#5a97ff"/>
+<text x="302" y="540" font-size="9" fill="#fff" font-weight="700" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">1</text>
+<text x="316" y="540" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 A · dict.fromkeys</text>
+<rect x="538" y="524" width="240" height="24" rx="12.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<circle cx="552" cy="536" r="7" fill="#5a97ff"/>
+<text x="552" y="540" font-size="9" fill="#fff" font-weight="700" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">2</text>
+<text x="566" y="540" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 C · set 성능</text>
+<rect x="788" y="524" width="240" height="24" rx="12.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<circle cx="802" cy="536" r="7" fill="#5a97ff"/>
+<text x="802" y="540" font-size="9" fill="#fff" font-weight="700" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">3</text>
+<text x="816" y="540" font-size="10" fill="#aab0c1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">문서 B · 스트리밍</text>
+</svg>

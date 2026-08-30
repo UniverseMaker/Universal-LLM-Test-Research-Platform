@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 760" width="1280" height="760" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+<rect x="0" y="0" width="1280" height="760" rx="0" fill="#0e1016"/>
+<rect x="0" y="0" width="232" height="760" rx="0" fill="#12151d"/>
+<line x1="232" y1="0" x2="232" y2="760" stroke="#272c39" stroke-width="1"/>
+<rect x="20" y="22" width="26" height="26" rx="6" fill="#0b0e14" stroke="#333a4b" stroke-width="1"/>
+<g stroke="#5a97ff" stroke-width="1.8" fill="none" stroke-linecap="round">
+<path d="M28 29H26v12h2M40 29h2v12h-2"/><path d="M29.5 38h5"/></g>
+<text x="56" y="34" font-size="15" fill="#e7e9f1" font-weight="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">LLM Lab</text>
+<text x="56" y="47" font-size="8.5" fill="#6d7488" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.02em">Universal LLM Test &amp; Research</text>
+<rect x="12" y="78" width="208" height="32" rx="8" fill="#16233d"/>
+<text x="24" y="99" font-size="13" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">💬</text>
+<text x="46" y="99" font-size="13.5" fill="#e7e9f1" font-weight="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chat</text>
+<text x="24" y="137" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">🔎</text>
+<text x="46" y="137" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">RAG Lab</text>
+<text x="24" y="175" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">⛓</text>
+<text x="46" y="175" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chain</text>
+<text x="24" y="213" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">🤖</text>
+<text x="46" y="213" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Agent</text>
+<text x="24" y="251" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">📊</text>
+<text x="46" y="251" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Eval</text>
+<text x="24" y="289" font-size="13" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">🎭</text>
+<text x="46" y="289" font-size="13.5" fill="#aab0c1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Simulate</text>
+<line x1="16" y1="312" x2="216" y2="312" stroke="#272c39" stroke-width="1"/>
+<text x="20" y="334" font-size="10" fill="#6d7488" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.12em">CHATS</text>
+<rect x="160" y="322" width="56" height="18" rx="5" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<text x="188" y="335" font-size="9.5" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle">+ New</text>
+<rect x="12" y="350" width="208" height="34" rx="7" fill="#1d212c"/>
+<text x="24" y="365" font-size="11.5" fill="#e7e9f1" font-weight="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chat with your-model</text>
+<text x="24" y="378" font-size="9" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">streaming · just now</text>
+<text x="24" y="405" font-size="11.5" fill="#aab0c1" font-weight="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">RAG eval run</text>
+<text x="24" y="418" font-size="9" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">streaming · just now</text>
+<text x="24" y="445" font-size="11.5" fill="#aab0c1" font-weight="500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Agent tool test</text>
+<text x="24" y="458" font-size="9" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">streaming · just now</text>
+<rect x="232" y="0" width="1048" height="52" rx="0" fill="#0e1016"/>
+<line x1="232" y1="52" x2="1280" y2="52" stroke="#272c39" stroke-width="1"/>
+<rect x="252" y="13" width="190" height="26" rx="13.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<circle cx="268" cy="26" r="4" fill="#3ec489"/>
+<text x="280" y="30" font-size="11" fill="#e7e9f1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">My vLLM · your-model</text>
+<rect x="452" y="13" width="150" height="26" rx="13.0" fill="#161922" stroke="#333a4b" stroke-width="1"/>
+<text x="466" y="30" font-size="11" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">your-model</text>
+<text x="590" y="30" font-size="10" fill="#6d7488" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">▾</text>
+<rect x="1130" y="13" width="130" height="26" rx="13.0" fill="#161922" stroke="#333a4b" stroke-width="1"/>
+<text x="1145" y="30" font-size="11" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">🩺 Inspector</text>
+<text x="272" y="84" font-size="20" fill="#e7e9f1" font-weight="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">Chat</text>
+<text x="332" y="84" font-size="11" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">· inspector open on assistant message</text>
+<rect x="402" y="114" width="300" height="42" rx="12" fill="#232838"/>
+<text x="418" y="138" font-size="12.5" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">이 계약의 해지 통지 기간은?</text>
+<text x="272" y="188" font-size="12.5" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">계약서 제12조에 따르면 해지 통지</text>
+<text x="272" y="206" font-size="12.5" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">기간은 30일입니다. 서면 통지를</text>
+<text x="272" y="224" font-size="12.5" fill="#e7e9f1" font-weight="400" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="start">요구하며, 통지 미준수 시…</text>
+<rect x="272" y="252" width="246.0" height="18" rx="9.0" fill="#1d212c" stroke="#333a4b" stroke-width="1"/>
+<circle cx="283" cy="261" r="3" fill="#5a97ff"/>
+<text x="292" y="265" font-size="9.5" fill="#aab0c1" font-weight="500" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">your-model · your-llm-server.example.com</text>
+<rect x="272" y="276" width="70" height="20" rx="6" fill="#16233d" stroke="#5a97ff" stroke-width="1"/>
+<text x="307" y="290" font-size="10" fill="#5a97ff" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="middle">🩺 open</text>
+<rect x="722" y="82" width="518" height="636" rx="12" fill="#161922" stroke="#272c39" stroke-width="1"/>
+<text x="738" y="106" font-size="10" fill="#5a97ff" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.08em">REQUEST INSPECTOR</text>
+<text x="738" y="122" font-size="10" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">chat · your-model</text>
+<text x="738" y="146" font-size="11" fill="#e7e9f1" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">request</text>
+<line x1="738" y1="154" x2="787" y2="154" stroke="#5a97ff" stroke-width="2"/>
+<text x="809" y="146" font-size="11" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">response</text>
+<text x="887" y="146" font-size="11" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">timing</text>
+<text x="951" y="146" font-size="11" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">usage</text>
+<line x1="738" y1="160" x2="1224" y2="160" stroke="#272c39" stroke-width="1"/>
+<text x="738" y="182" font-size="10.5" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">method</text>
+<text x="812" y="182" font-size="10.5" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">POST</text>
+<text x="738" y="202" font-size="10.5" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">url</text>
+<text x="812" y="202" font-size="10.5" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">https://your-llm-server.example.com/v1/chat/…</text>
+<text x="738" y="222" font-size="10.5" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">endpoint</text>
+<text x="812" y="222" font-size="10.5" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">chat</text>
+<text x="738" y="242" font-size="10.5" fill="#6d7488" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">proxy</text>
+<text x="812" y="242" font-size="10.5" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">false</text>
+<text x="738" y="278" font-size="9.5" fill="#6d7488" font-weight="600" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start" letter-spacing="0.1em">BODY</text>
+<rect x="738" y="286" width="486" height="180" rx="8" fill="#0e1016" stroke="#272c39" stroke-width="1"/>
+<text x="750" y="306" font-size="10" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">{</text>
+<text x="750" y="321" font-size="10" fill="#3ec2be" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">  &quot;model&quot;: &quot;your-model&quot;,</text>
+<text x="750" y="336" font-size="10" fill="#3ec2be" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">  &quot;stream&quot;: true,</text>
+<text x="750" y="351" font-size="10" fill="#3ec2be" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">  &quot;messages&quot;: [</text>
+<text x="750" y="366" font-size="10" fill="#3ec2be" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">    { &quot;role&quot;: &quot;user&quot;,</text>
+<text x="750" y="381" font-size="10" fill="#3ec2be" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">      &quot;content&quot;: &quot;이 계약의 해지</text>
+<text x="750" y="396" font-size="10" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">        통지 기간은?&quot; }</text>
+<text x="750" y="411" font-size="10" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">  ],</text>
+<text x="750" y="426" font-size="10" fill="#3ec2be" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">  &quot;temperature&quot;: 0.7</text>
+<text x="750" y="441" font-size="10" fill="#e7e9f1" font-weight="400" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace" text-anchor="start">}</text>
+</svg>

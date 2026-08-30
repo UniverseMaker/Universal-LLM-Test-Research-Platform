@@ -1,6 +1,6 @@
 # Screenshot capture guide / 스크린샷 캡처 가이드
 
-Capture the following screens from a **running instance with a real model connected**, and save each PNG into this folder with the exact filename shown. The README and case study reference these paths.
+These images are shipped as **illustrative SVG mockups** in this folder. To replace any with a **real screenshot**, save a PNG/SVG over the matching filename below (the README and case study will pick it up automatically).
 
 실제 모델이 **연결된 상태**로 아래 화면들을 캡처해, 표시된 **정확한 파일명**으로 이 폴더에 저장하세요. README와 케이스 스터디가 이 경로를 참조합니다.
 

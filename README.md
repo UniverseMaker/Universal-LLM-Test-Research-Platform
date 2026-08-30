@@ -10,7 +10,7 @@ A **pure‑frontend, bring‑your‑own‑key** workbench to connect any **OpenA
 
 [English](#english) · [한국어](#한국어)
 
-![LLM Lab — chat with a connected model](docs/images/hero-chat.png)
+![LLM Lab — chat with a connected model](docs/images/hero-chat.svg)
 
 </div>
 
@@ -49,19 +49,19 @@ Testing an LLM endpoint usually means scattered `curl` commands, throwaway Pytho
 
 ### Screenshots
 
-> Replace the placeholders in `docs/images/` with real captures — see [`docs/images/CAPTURE_GUIDE.md`](docs/images/CAPTURE_GUIDE.md).
+> The images below are illustrative UI mockups of each workbench (the real app uses the same dark theme). To swap in real captures, replace the files in `docs/images/` — see [`docs/images/CAPTURE_GUIDE.md`](docs/images/CAPTURE_GUIDE.md).
 
 | Connection management | Request inspector |
 |---|---|
-| ![Connections](docs/images/connections.png) | ![Inspector](docs/images/inspector.png) |
+| ![Connections](docs/images/connections.svg) | ![Inspector](docs/images/inspector.svg) |
 
 | RAG Lab (hybrid / RRF) | Prompt chaining |
 |---|---|
-| ![RAG](docs/images/rag.png) | ![Chain](docs/images/chain.png) |
+| ![RAG](docs/images/rag.svg) | ![Chain](docs/images/chain.svg) |
 
 | Agent / Tools | Evaluation |
 |---|---|
-| ![Agent](docs/images/agent.png) | ![Eval](docs/images/eval.png) |
+| ![Agent](docs/images/agent.svg) | ![Eval](docs/images/eval.svg) |
 
 ### Quick start
 
@@ -193,11 +193,11 @@ LLM 엔드포인트를 테스트하려면 보통 흩어진 `curl` 명령, 일회
 
 | 연결 관리 | 요청 인스펙터 |
 |---|---|
-| ![연결](docs/images/connections.png) | ![인스펙터](docs/images/inspector.png) |
+| ![연결](docs/images/connections.svg) | ![인스펙터](docs/images/inspector.svg) |
 
 | RAG Lab (하이브리드/RRF) | 프롬프트 체이닝 |
 |---|---|
-| ![RAG](docs/images/rag.png) | ![체인](docs/images/chain.png) |
+| ![RAG](docs/images/rag.svg) | ![체인](docs/images/chain.svg) |
 
 ### 빠른 시작
 
