@@ -39,10 +39,11 @@ Testing an LLM endpoint usually means scattered `curl` commands, throwaway Pytho
 | Workbench | What it does |
 |---|---|
 | 💬 **Chat** | Multi‑turn chat with model switching, multiple conversation sessions (ChatGPT‑style), per‑message model badges, streaming, and reasoning display. |
-| 🔎 **RAG Lab** | Retrieval experiments — **BM25** (lexical), **dense** (embedding), **hybrid** with **RRF** (Reciprocal Rank Fusion), and a **GraphRAG** viewer. Chunking, retrieval, and cited answers. |
+| 🔎 **RAG Lab** | Retrieval experiments — **BM25** (lexical), **dense** (embedding), **hybrid** with **RRF** (Reciprocal Rank Fusion), a **reranking** stage (cross‑encoder / LLM‑as‑reranker), a **retrieval‑evaluation harness** (**nDCG@k · MRR · Recall@k · MAP**), an **embeddings explorer** (similarity heatmap + 2D projection), and a **GraphRAG** viewer. |
 | ⛓️ **Chain** | Prompt‑chaining / workflow runner with `llm` · `condition` (branching) · `transform` (JS) · `output` steps and **20 built‑in presets** (CoT, Self‑Refine, CoVe, Least‑to‑Most, Map‑Reduce, classify‑route, evaluator‑optimizer, and more). |
 | 🤖 **Agent / Tools** | ReAct‑style agent loop (Thought → Action → Observation) with tool calls. |
-| 📊 **Eval / Bench** | A/B comparison, N‑run variance, word‑level diff, and LLM‑as‑judge scoring. |
+| 📊 **Eval / Bench** | A/B comparison, N‑run variance, word‑level diff, LLM‑as‑judge scoring, **parameter sweeps** (grid search over sampling params), and **endpoint load/latency benchmarking** (p50/p95/p99 TTFT, throughput, concurrency sweep). |
+| 📦 **Batch** | Run a prompt or chain over a **CSV/JSONL dataset** with `{{column}}` templating, bounded concurrency, and CSV/JSONL export. |
 | 🎭 **Simulate** | Automated model‑vs‑model (or persona‑vs‑persona) conversations. |
 | 🔌 **Connections** | Bring‑your‑own connection profiles with import/export, JSON paste‑to‑autofill, and an engineer‑grade settings panel (context window, all sampling params, `extra_body`). |
 | 🩺 **Inspector** | Per‑request URL / headers / body / response / raw stream / timing (TTFT, tok/s) / token usage, plus copy‑ready `curl` · Python · `fetch` snippets. |
@@ -179,10 +180,11 @@ LLM 엔드포인트를 테스트하려면 보통 흩어진 `curl` 명령, 일회
 | 워크벤치 | 설명 |
 |---|---|
 | 💬 **Chat** | 모델 교체·다중 대화 세션(ChatGPT 방식)·메시지별 모델 뱃지·스트리밍·추론(reasoning) 표시. |
-| 🔎 **RAG Lab** | 검색 실험 — **BM25**(렉시컬), **Dense**(임베딩), **RRF**(상호 순위 융합) **하이브리드**, **GraphRAG** 뷰어. 청킹·검색·인용 답변. |
+| 🔎 **RAG Lab** | 검색 실험 — **BM25**(렉시컬), **Dense**(임베딩), **RRF**(상호 순위 융합) **하이브리드**, **리랭킹** 스테이지(cross‑encoder / LLM 리랭커), **검색 평가 하네스**(**nDCG@k · MRR · Recall@k · MAP**), **임베딩 익스플로러**(유사도 히트맵 + 2D 투영), **GraphRAG** 뷰어. |
 | ⛓️ **Chain** | `llm`·`condition`(분기)·`transform`(JS)·`output` 스텝으로 구성하는 워크플로 러너 + **내장 프리셋 20종**(CoT, Self‑Refine, CoVe, Least‑to‑Most, Map‑Reduce, 분류‑라우팅, Evaluator‑Optimizer 등). |
 | 🤖 **Agent / Tools** | ReAct 루프(Thought → Action → Observation) 기반 도구 호출 에이전트. |
-| 📊 **Eval / Bench** | A/B 비교, N회 반복 변동성, 단어 단위 diff, LLM‑as‑judge 채점. |
+| 📊 **Eval / Bench** | A/B 비교, N회 반복 변동성, 단어 단위 diff, LLM‑as‑judge 채점, **파라미터 스윕**(샘플링 파라미터 그리드 서치), **엔드포인트 부하/지연 벤치마킹**(p50/p95/p99 TTFT·처리량·동시성 스윕). |
+| 📦 **Batch** | 프롬프트/체인을 **CSV/JSONL 데이터셋**에 `{{column}}` 템플릿으로 일괄 실행, 동시성 제한, CSV/JSONL 내보내기. |
 | 🎭 **Simulate** | 모델 대 모델(또는 페르소나 대 페르소나) 자동 대화. |
 | 🔌 **Connections** | 연결 프로필 가져오기/내보내기, JSON 붙여넣기 자동 채움, 엔지니어용 상세설정(컨텍스트 윈도우·전 샘플링 파라미터·`extra_body`). |
 | 🩺 **Inspector** | 요청별 URL/헤더/본문/응답/원시 스트림/타이밍(TTFT, tok/s)/토큰 사용량 + `curl`·Python·`fetch` 스니펫. |

@@ -519,6 +519,170 @@ function judgeRubric(question, answer, j, opts) {
 }
 
 /* ==========================================================================
+   B2. RETRIEVAL EVAL — 검색 평가 지표 (nDCG · MRR · Recall · Precision · MAP)
+   순수·결정적. 라벨 포맷: [docId,...] (이진, rel=1) 또는 {docId:grade} (등급).
+   지표 정의(정확성 최우선):
+     Precision@k = (top-k 중 관련)/k          Recall@k = (top-k 중 관련)/(전체 관련 수)
+     MRR         = 1/rank_of_first_relevant   (없으면 0)
+     AP          = Σ_{관련문서 위치 r} P@r / (전체 관련 수)     ; MAP = mean(AP)
+     DCG@k       = Σ_{i=1..k} rel_i/log2(i+1) ; nDCG@k = DCG@k/IDCG@k (IDCG=0→0)
+   ========================================================================== */
+
+// 관련도 집합 정규화 → {id:true} (grade>0 인 문서만 "관련")
+function toRelSet(x) {
+  var set = {};
+  if (!x) return set;
+  if (typeof Set !== 'undefined' && x instanceof Set) { x.forEach(function (id) { set[String(id)] = true; }); return set; }
+  if (Array.isArray(x)) { x.forEach(function (id) { if (id != null) set[String(id)] = true; }); return set; }
+  if (typeof x === 'object') {
+    Object.keys(x).forEach(function (id) {
+      var v = x[id];
+      if (v === true) set[id] = true;
+      else if (typeof v === 'number') { if (v > 0) set[id] = true; }
+      else if (v != null && v !== false && v !== 0) set[id] = true;
+    });
+  }
+  return set;
+}
+function relCount(set) { return Object.keys(set).length; }
+
+// 라벨(배열=이진 / 객체=등급) → {gradeMap, relevantSet, relevantCount, graded}
+function normalizeLabels(labels) {
+  var gradeMap = {}, graded = false;
+  if (Array.isArray(labels)) {
+    labels.forEach(function (id) { if (id != null) gradeMap[String(id)] = 1; });
+  } else if (labels && typeof labels === 'object') {
+    graded = true;
+    Object.keys(labels).forEach(function (id) { var g = Number(labels[id]); gradeMap[String(id)] = isNaN(g) ? 0 : g; });
+  }
+  var relevantSet = toRelSet(gradeMap);
+  return { gradeMap: gradeMap, relevantSet: relevantSet, relevantCount: relCount(relevantSet), graded: graded };
+}
+
+// Precision@k = (top-k 중 관련)/k  (분모는 고정 k)
+function precisionAtK(ranked, relevantSet, k) {
+  ranked = ranked || []; var set = toRelSet(relevantSet);
+  if (k == null) k = ranked.length;
+  if (k <= 0) return 0;
+  var kk = Math.min(k, ranked.length), hit = 0;
+  for (var i = 0; i < kk; i++) if (set[String(ranked[i])]) hit++;
+  return hit / k;
+}
+
+// Recall@k = (top-k 중 관련)/(전체 관련 수)
+function recallAtK(ranked, relevantSet, k) {
+  ranked = ranked || []; var set = toRelSet(relevantSet); var total = relCount(set);
+  if (!total) return 0;
+  if (k == null) k = ranked.length;
+  var kk = Math.min(k, ranked.length), hit = 0;
+  for (var i = 0; i < kk; i++) if (set[String(ranked[i])]) hit++;
+  return hit / total;
+}
+
+// MRR(단일 질의) = 1/(첫 관련문서 순위) ; 없으면 0
+function mrr(ranked, relevantSet) {
+  ranked = ranked || []; var set = toRelSet(relevantSet);
+  for (var i = 0; i < ranked.length; i++) if (set[String(ranked[i])]) return 1 / (i + 1);
+  return 0;
+}
+
+// AP(단일 질의) = Σ_{관련문서 위치 r} P@r / (전체 관련 수)
+function averagePrecision(ranked, relevantSet) {
+  ranked = ranked || []; var set = toRelSet(relevantSet); var total = relCount(set);
+  if (!total) return 0;
+  var hit = 0, sum = 0;
+  for (var i = 0; i < ranked.length; i++) {
+    if (set[String(ranked[i])]) { hit++; sum += hit / (i + 1); }   // P@(i+1) at each relevant hit
+  }
+  return sum / total;
+}
+
+// DCG@k = Σ_{i=1..k} rel_i/log2(i+1)  (rels: 위치별 등급 배열)
+function dcg(rels, k) {
+  rels = rels || [];
+  var lim = (k == null) ? rels.length : Math.min(k, rels.length), s = 0;
+  for (var i = 0; i < lim; i++) {
+    var g = Number(rels[i]) || 0;
+    s += g / (Math.log(i + 2) / Math.LN2);   // 0-based i → 위치 p=i+1 → log2(p+1)=log2(i+2)
+  }
+  return s;
+}
+
+// nDCG@k = DCG@k/IDCG@k  (relevanceMap: 배열=이진 또는 {docId:grade}); IDCG=0→0
+function ndcg(ranked, relevanceMap, k) {
+  ranked = ranked || [];
+  var gm = {};
+  if (Array.isArray(relevanceMap)) relevanceMap.forEach(function (id) { gm[String(id)] = 1; });
+  else if (relevanceMap && typeof relevanceMap === 'object') Object.keys(relevanceMap).forEach(function (id) { var g = Number(relevanceMap[id]); gm[String(id)] = isNaN(g) ? 0 : g; });
+  var rels = ranked.map(function (id) { return gm[String(id)] || 0; });
+  var d = dcg(rels, k);
+  var ideal = Object.keys(gm).map(function (id) { return gm[id]; }).filter(function (g) { return g > 0; }).sort(function (a, b) { return b - a; });
+  var idcg = dcg(ideal, k);
+  return idcg > 0 ? d / idcg : 0;
+}
+
+// 단일 질의 지표 묶음 → {'ndcg@k','recall@k','precision@k', ... ,'mrr','map','ap'}
+function retrievalMetrics(rankedIds, labels, ks) {
+  ks = (ks && ks.length) ? ks : [5, 10];
+  var norm = normalizeLabels(labels);
+  var out = {};
+  ks.forEach(function (k) {
+    out['ndcg@' + k] = ndcg(rankedIds, norm.gradeMap, k);
+    out['recall@' + k] = recallAtK(rankedIds, norm.relevantSet, k);
+    out['precision@' + k] = precisionAtK(rankedIds, norm.relevantSet, k);
+  });
+  out['mrr'] = mrr(rankedIds, norm.relevantSet);
+  out['map'] = averagePrecision(rankedIds, norm.relevantSet);
+  out['ap'] = out['map'];   // 단일 질의에서는 AP == MAP(집계 전)
+  return out;
+}
+
+// 검색 평가 오케스트레이션
+// opts: { dataset:[{query,relevant}], methods:[...], ks:[5,10], corpus, retrieveFn(query,method,corpus,item)->Promise<docId[]>, onProgress, signal }
+// 반환: { perQuery:[{qi,query,method,ranked,relevant,metrics}], byMethod:{m:{avg,queries,n}}, methods, ks }
+function runRetrievalEval(opts) {
+  opts = opts || {};
+  var dataset = opts.dataset || [];
+  var methods = (opts.methods && opts.methods.length) ? opts.methods : ['hybrid'];
+  var ks = (opts.ks && opts.ks.length) ? opts.ks : [5, 10];
+  var retrieveFn = opts.retrieveFn;
+  var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
+  if (typeof retrieveFn !== 'function') {
+    return Promise.resolve({ op: 'retrievalEval', error: 'retrieveFn 필요', perQuery: [], byMethod: {}, methods: methods, ks: ks });
+  }
+  var perQuery = [];
+  var total = dataset.length * methods.length, done = 0;
+  var tasks = [];
+  dataset.forEach(function (q, qi) { methods.forEach(function (m) { tasks.push({ q: q, qi: qi, m: m }); }); });
+
+  return tasks.reduce(function (chain, t) {
+    return chain.then(function () {
+      if (aborted(opts.signal)) return;
+      return Promise.resolve(retrieveFn(t.q.query, t.m, opts.corpus, t.q)).then(function (rankedIds) {
+        rankedIds = (rankedIds || []).map(function (x) { return String(x); });
+        var metrics = retrievalMetrics(rankedIds, t.q.relevant, ks);
+        perQuery.push({ qi: t.qi, query: t.q.query, method: t.m, ranked: rankedIds, relevant: t.q.relevant, metrics: metrics });
+        done++; onProgress({ done: done, total: total });
+      });
+    });
+  }, Promise.resolve()).then(function () {
+    var byMethod = {};
+    methods.forEach(function (m) {
+      var rows = perQuery.filter(function (r) { return r.method === m; });
+      var avg = {};
+      if (rows.length) {
+        Object.keys(rows[0].metrics).forEach(function (key) {
+          var s = 0; rows.forEach(function (r) { s += (r.metrics[key] || 0); });
+          avg[key] = s / rows.length;
+        });
+      }
+      byMethod[m] = { method: m, n: rows.length, avg: avg, queries: rows };
+    });
+    return { op: 'retrievalEval', methods: methods, ks: ks, perQuery: perQuery, byMethod: byMethod, provider: 'browser' };
+  });
+}
+
+/* ==========================================================================
    C. SIMULATE  (§8.8)
    ========================================================================== */
 
@@ -598,7 +762,585 @@ function runSimulation(opts) {
 }
 
 /* ==========================================================================
-   노출 (window.LLMLab.agent / .eval / .sim)
+   D. BATCH RUNNER  — 데이터셋 배치 실행 (additive · 순수 로직)
+   프롬프트(또는 체인)를 데이터셋의 각 행에 일괄 실행하고 결과를 수집한다.
+   - parseBatchDataset : CSV/JSONL 자동 감지 → {rows,columns,format}
+   - batchInterpolate  : {{column}} → 행 값 치환(없는 키 = 빈 문자열)
+   - runBatch          : 동시성 제한 풀 + 진행 콜백 + 중단 + 행별 에러 격리
+   - batchToCSV/JSONL  : 결과 내보내기 문자열
+   ========================================================================== */
+
+// 배열(객체 목록) → {rows,columns,format}
+function rowsFromObjects(arr, fmt) {
+  var cols = [], seen = {};
+  var rows = (arr || []).map(function (o) {
+    var row = (o && typeof o === 'object' && !Array.isArray(o)) ? o : { value: o };
+    Object.keys(row).forEach(function (k) { if (!seen[k]) { seen[k] = true; cols.push(k); } });
+    return row;
+  });
+  return { rows: rows, columns: cols, format: fmt || 'jsonl' };
+}
+
+// CSV 텍스트 → {rows,columns,format:'csv'}  (첫 줄 헤더, 빈/중복 헤더 보정)
+function rowsFromCSV(text) {
+  var grid = parseCSV(text);
+  if (!grid.length) return { rows: [], columns: [], format: 'csv' };
+  var raw = grid[0].map(function (h, i) { var s = String(h == null ? '' : h).trim(); return s || ('col' + (i + 1)); });
+  var seen = {}, cols = raw.map(function (h) { var base = h, k = h, n = 2; while (seen[k]) { k = base + '_' + n; n++; } seen[k] = true; return k; });
+  var rows = [];
+  for (var r = 1; r < grid.length; r++) {
+    var obj = {};
+    for (var c = 0; c < cols.length; c++) obj[cols[c]] = grid[r][c] != null ? grid[r][c] : '';
+    rows.push(obj);
+  }
+  return { rows: rows, columns: cols, format: 'csv' };
+}
+
+// CSV/JSONL 자동 감지 파싱
+function parseBatchDataset(text) {
+  text = String(text == null ? '' : text).replace(/^﻿/, '').trim();
+  if (!text) return { rows: [], columns: [], format: 'empty' };
+  // 단일 JSON 배열
+  if (text[0] === '[') {
+    var arr = safeJSON(text);
+    if (Array.isArray(arr)) return rowsFromObjects(arr, 'json');
+  }
+  // JSONL: 모든 비어있지 않은 줄이 { 또는 [ 로 시작 + JSON 파싱 성공
+  var lines = text.split(/\r?\n/).filter(function (l) { return l.trim().length; });
+  var looksJsonl = lines.length > 0 && lines.every(function (l) { var t = l.trim(); return t[0] === '{' || t[0] === '['; });
+  if (looksJsonl) {
+    var objs = [], allOk = true;
+    for (var i = 0; i < lines.length; i++) { var o = safeJSON(lines[i].trim()); if (o && typeof o === 'object') objs.push(o); else { allOk = false; break; } }
+    if (allOk && objs.length) return rowsFromObjects(objs, 'jsonl');
+  }
+  // 기본: CSV
+  return rowsFromCSV(text);
+}
+
+// {{column}} 치환 — 없는 키는 빈 문자열
+function batchInterpolate(template, row) {
+  return String(template == null ? '' : template).replace(/\{\{\s*([\w.$-]+)\s*\}\}/g, function (_, key) {
+    var v = row ? row[key] : '';
+    if (v == null) return '';
+    return typeof v === 'string' ? v : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+  });
+}
+
+// 체인 결과에서 사용량/에러 추출
+function chainUsage(r) {
+  if (!r || !r.trace) return null;
+  var total = 0, has = false;
+  r.trace.forEach(function (t) { if (t.usage && t.usage.total_tokens != null) { total += Number(t.usage.total_tokens) || 0; has = true; } });
+  return has ? { total_tokens: total } : null;
+}
+function findChainError(r) {
+  if (!r || !r.trace) return null;
+  for (var i = 0; i < r.trace.length; i++) if (r.trace[i].status === 'error') return r.trace[i].error || { type: 'chain', message: 'step error' };
+  return null;
+}
+
+// 배치 실행 — 동시성 제한, 진행 콜백, 중단(AbortController), 행별 에러 격리
+// opts: { rows, template, systemPrompt?, mode:'prompt'|'chain', chain?,
+//         profile|profileId, model, params, concurrency, useProxy, onProgress, signal }
+function runBatch(opts) {
+  opts = opts || {};
+  var rows = opts.rows || [];
+  var template = opts.template != null ? opts.template : '{{input}}';
+  var systemPrompt = opts.systemPrompt || '';
+  var mode = opts.mode === 'chain' ? 'chain' : 'prompt';
+  var chain = opts.chain || null;
+  var concurrency = Math.max(1, Math.min(20, Math.floor(opts.concurrency || 3)));
+  var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
+  var signal = opts.signal;
+  var total = rows.length;
+  var results = new Array(total);
+  var t0all = now();
+  var done = 0, ok = 0, failed = 0;
+
+  function runOne(index) {
+    var row = rows[index] || {};
+    var prompt = batchInterpolate(template, row);
+    var s0 = now();
+    if (aborted(signal)) {
+      return Promise.resolve({ index: index, vars: row, prompt: prompt, output: '', error: { type: 'aborted', message: 'aborted' }, usage: null, ms: 0 });
+    }
+    if (mode === 'chain') {
+      var chainRunner = (window.LLMLab && window.LLMLab.chain && window.LLMLab.chain.run) || (L.chain && L.chain.run);
+      if (typeof chainRunner !== 'function') {
+        return Promise.resolve({ index: index, vars: row, prompt: prompt, output: '', error: { type: 'no_chain', message: 'chain 러너 미로드' }, usage: null, ms: 0 });
+      }
+      return Promise.resolve(chainRunner({
+        chain: chain, vars: row, input: prompt,
+        profile: opts.profile, profileId: opts.profileId, model: opts.model,
+        params: opts.params, useProxy: opts.useProxy, signal: signal,
+      })).then(function (r) {
+        r = r || {};
+        var err = r.ok ? null : (findChainError(r) || { type: 'chain', message: r.aborted ? 'aborted' : 'chain 실패' });
+        return { index: index, vars: row, prompt: prompt, output: r.output != null ? r.output : '', error: err, usage: chainUsage(r), ms: Math.round(now() - s0) };
+      }).catch(function (e) {
+        return { index: index, vars: row, prompt: prompt, output: '', error: { type: 'exception', message: String(e && e.message || e) }, usage: null, ms: Math.round(now() - s0) };
+      });
+    }
+    // prompt 모드
+    var msgs = [];
+    if (systemPrompt && String(systemPrompt).trim()) msgs.push({ role: 'system', content: systemPrompt });
+    msgs.push({ role: 'user', content: prompt });
+    return kernelRun({
+      module: 'batch', profile: opts.profile, profileId: opts.profileId, model: opts.model,
+      useProxy: opts.useProxy, params: Object.assign({}, opts.params, { stream: false }),
+      messages: msgs, reasoningEnabled: false, signal: signal,
+    }).then(function (res) {
+      var ms = timing(res).totalMs != null ? Math.round(timing(res).totalMs) : Math.round(now() - s0);
+      return { index: index, vars: row, prompt: prompt, output: res.content || '', error: res.ok ? null : (res.error || { message: 'error' }), usage: res.usage || null, ms: ms };
+    }).catch(function (e) {
+      return { index: index, vars: row, prompt: prompt, output: '', error: { type: 'exception', message: String(e && e.message || e) }, usage: null, ms: Math.round(now() - s0) };
+    });
+  }
+
+  return new Promise(function (resolve) {
+    if (total === 0) { resolve({ rows: [], stats: { count: 0, ok: 0, failed: 0, totalMs: 0, avgMs: 0 } }); return; }
+    var next = 0, active = 0, completed = 0;
+    function build() {
+      for (var i = 0; i < total; i++) { if (!results[i]) results[i] = { index: i, vars: rows[i], prompt: '', output: '', error: { type: 'skipped', message: 'not run' }, usage: null, ms: 0 }; }
+      var totalMs = Math.round(now() - t0all);
+      return { rows: results, stats: { count: total, ok: ok, failed: failed, totalMs: totalMs, avgMs: total ? Math.round(totalMs / total) : 0 } };
+    }
+    function onComplete(idx, rec) {
+      results[idx] = rec; active--; completed++; done++;
+      if (rec.error) failed++; else ok++;
+      onProgress({ done: done, total: total, index: idx, ok: ok, failed: failed });
+      if (completed >= total) { resolve(build()); return; }
+      launch();
+    }
+    function launch() {
+      while (active < concurrency && next < total) {
+        var idx = next++; active++;
+        runOne(idx).then((function (i) { return function (rec) { onComplete(i, rec); }; })(idx));
+      }
+    }
+    launch();
+  });
+}
+
+// 결과 CSV 내보내기 — 입력 컬럼 + output + status + error + ms
+function csvCell2(v) {
+  if (v == null) v = '';
+  else if (typeof v === 'object') v = JSON.stringify(v);
+  else v = String(v);
+  return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function batchResultRows(results) { return (results && results.rows) ? results.rows : (Array.isArray(results) ? results : []); }
+function batchToCSV(results) {
+  var rows = batchResultRows(results);
+  var cols = [], seen = {};
+  rows.forEach(function (r) { var v = r.vars || {}; Object.keys(v).forEach(function (k) { if (!seen[k]) { seen[k] = true; cols.push(k); } }); });
+  var header = cols.concat(['output', 'status', 'error', 'ms']);
+  var lines = [header.map(csvCell2).join(',')];
+  rows.forEach(function (r) {
+    var v = r.vars || {};
+    var line = cols.map(function (k) { return csvCell2(v[k]); });
+    line.push(csvCell2(r.output));
+    line.push(csvCell2(r.error ? 'error' : 'ok'));
+    line.push(csvCell2(r.error ? (r.error.message || String(r.error)) : ''));
+    line.push(csvCell2(r.ms));
+    lines.push(line.join(','));
+  });
+  return lines.join('\n');
+}
+function batchToJSONL(results) {
+  var rows = batchResultRows(results);
+  return rows.map(function (r) {
+    var v = r.vars || {}, o = {};
+    Object.keys(v).forEach(function (k) { o[k] = v[k]; });
+    o.output = r.output != null ? r.output : '';
+    o.status = r.error ? 'error' : 'ok';
+    if (r.error) o.error = r.error.message || String(r.error);
+    o.ms = r.ms;
+    return JSON.stringify(o);
+  }).join('\n');
+}
+
+/* ==========================================================================
+   E. PARAMETER SWEEP / GRID SEARCH — 파라미터 스윕 (additive · 순수 로직)
+   같은 프롬프트를 여러 샘플링 파라미터 조합(데카르트 곱)으로 실행해 비교한다.
+   - expandGrid(axes) : 축 정의 → 조합 배열(데카르트 곱). 값 문자열→숫자 파싱.
+   - runSweep(opts)   : 조합 × repeats 실행. 동시성 풀(runBatch와 동형) 재사용,
+                        진행 콜백·중단·에러 격리. 조합별 자동지표(모델 불필요) 집계.
+   자동지표: outLenAvg(출력길이 평균), distinctRatio(고유출력수/샘플수 — 낮을수록
+             결정적/일관), tokPerSecAvg. judge 옵션 시 조합 대표출력 LLM 채점.
+   ========================================================================== */
+
+// 값 파싱 — 숫자형 문자열은 숫자로("0.7"→0.7), true/false는 불리언, 그 외 원본
+function coerceValue(v) {
+  if (typeof v === 'number' || typeof v === 'boolean') return v;
+  if (v == null) return v;
+  var s = String(v).trim();
+  if (s === '') return s;
+  if (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(s)) { var n = Number(s); if (!isNaN(n)) return n; }
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  return s;
+}
+
+// 축 정의 → 데카르트 곱. axes:{temperature:[0,0.5,1], top_p:[0.9,1]} → 6개 조합.
+// 값이 배열 아니면 단일값으로 감쌈. 빈 배열/누락 축은 제외. 축 0개 → [{}](빈 1조합).
+function expandGrid(axes) {
+  axes = axes || {};
+  var keys = Object.keys(axes).filter(function (k) {
+    var v = axes[k];
+    if (v == null) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    return true;
+  });
+  var combos = [{}];
+  keys.forEach(function (k) {
+    var raw = axes[k];
+    var vals = Array.isArray(raw) ? raw : [raw];
+    var next = [];
+    combos.forEach(function (base) {
+      vals.forEach(function (v) {
+        var c = Object.assign({}, base);
+        c[k] = coerceValue(v);
+        next.push(c);
+      });
+    });
+    combos = next;
+  });
+  return combos;
+}
+
+// 자기일관성 근사: 고유 출력수 / 샘플수 (1=전부 상이, 낮을수록 결정적/일관)
+function distinctRatio(outputs) {
+  var valid = (outputs || []).filter(function (o) { return o != null; });
+  if (!valid.length) return 0;
+  var seen = {};
+  valid.forEach(function (o) { seen[String(o)] = true; });
+  return Object.keys(seen).length / valid.length;
+}
+
+// 조합의 run들 → 자동 집계 지표 (모델 불필요·결정적)
+function aggregateRuns(runs) {
+  runs = runs || [];
+  var okRuns = runs.filter(function (r) { return r && !r.error; });
+  var outs = okRuns.map(function (r) { return r.output || ''; });
+  var lens = outs.map(function (o) { return o.length; });
+  var outLenAvg = lens.length ? lens.reduce(function (s, x) { return s + x; }, 0) / lens.length : 0;
+  var tps = okRuns.map(function (r) { return r.tokPerSec; }).filter(function (x) { return typeof x === 'number' && !isNaN(x); });
+  var tokPerSecAvg = tps.length ? tps.reduce(function (s, x) { return s + x; }, 0) / tps.length : null;
+  var msArr = okRuns.map(function (r) { return r.ms; }).filter(function (x) { return typeof x === 'number' && !isNaN(x); });
+  var msAvg = msArr.length ? msArr.reduce(function (s, x) { return s + x; }, 0) / msArr.length : null;
+  return {
+    outLenAvg: outLenAvg, distinctRatio: distinctRatio(outs), tokPerSecAvg: tokPerSecAvg,
+    msAvg: msAvg, n: runs.length, okCount: okRuns.length, errCount: runs.length - okRuns.length,
+  };
+}
+
+function sweepFirstOk(combo) {
+  for (var i = 0; i < combo.runs.length; i++) if (combo.runs[i] && !combo.runs[i].error) return combo.runs[i].output || '';
+  return combo.runs[0] ? (combo.runs[0].output || '') : '';
+}
+
+// judge(옵션) — 조합 대표출력을 루브릭 채점 (참고치). judgeRubric 재사용.
+function runSweepJudge(prompt, combos, opts) {
+  var out = { mode: 'rubric', referenceOnly: true, perCombo: [], provider: 'server' };
+  return combos.reduce(function (chain, c, ci) {
+    return chain.then(function () {
+      if (aborted(opts.signal)) return;
+      return judgeRubric(prompt, sweepFirstOk(c), opts.judge || {}, opts).then(function (score) {
+        out.perCombo.push({ comboIndex: ci, params: c.params, total: score.total, scores: score.scores });
+      });
+    });
+  }, Promise.resolve()).then(function () { return out; });
+}
+
+// 파라미터 스윕 실행 — 각 조합 × repeats회, 동시성 풀·중단·에러 격리
+// opts: { prompt, systemPrompt?, axes, baseParams?, repeats?, profile|profileId, model,
+//         concurrency, useProxy, reasoningEnabled?, onProgress, signal, judge? }
+// 반환: { op:'sweep', combos:[{params,combo,runs:[{output,usage,ms,tokPerSec,error}],agg}], axes, axisKeys, stats, judge? }
+function runSweep(opts) {
+  opts = opts || {};
+  var prompt = opts.prompt != null ? String(opts.prompt) : '';
+  var systemPrompt = opts.systemPrompt || '';
+  var axes = opts.axes || {};
+  var baseParams = opts.baseParams || {};
+  var repeats = Math.max(1, Math.floor(opts.repeats || 1));
+  var concurrency = Math.max(1, Math.min(20, Math.floor(opts.concurrency || 3)));
+  var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
+  var signal = opts.signal;
+
+  var comboParams = expandGrid(axes);
+  var combos = comboParams.map(function (cp) {
+    return { params: Object.assign({}, baseParams, cp), combo: cp, runs: [], agg: null };
+  });
+
+  var tasks = [];
+  combos.forEach(function (c, ci) { for (var r = 0; r < repeats; r++) tasks.push({ ci: ci, r: r }); });
+  var total = tasks.length, done = 0;
+
+  function runOne(t) {
+    var combo = combos[t.ci];
+    var s0 = now();
+    if (aborted(signal)) {
+      return Promise.resolve({ output: '', usage: null, ms: 0, tokPerSec: null, error: { type: 'aborted', message: 'aborted' } });
+    }
+    var msgs = [];
+    if (systemPrompt && String(systemPrompt).trim()) msgs.push({ role: 'system', content: systemPrompt });
+    msgs.push({ role: 'user', content: prompt });
+    return kernelRun({
+      module: 'sweep', profile: opts.profile, profileId: opts.profileId, model: opts.model,
+      useProxy: opts.useProxy, params: Object.assign({}, combo.params, { stream: false }),
+      messages: msgs, reasoningEnabled: opts.reasoningEnabled === true, signal: signal,
+    }).then(function (res) {
+      var ms = timing(res).totalMs != null ? Math.round(timing(res).totalMs) : Math.round(now() - s0);
+      return {
+        output: res.content || '', usage: res.usage || null, ms: ms,
+        tokPerSec: timing(res).tokPerSec != null ? timing(res).tokPerSec : null,
+        error: res.ok ? null : (res.error || { message: 'error' }),
+      };
+    }).catch(function (e) {
+      return { output: '', usage: null, ms: Math.round(now() - s0), tokPerSec: null, error: { type: 'exception', message: String(e && e.message || e) } };
+    });
+  }
+
+  return new Promise(function (resolve) {
+    if (total === 0) { resolve(finish()); return; }
+    var next = 0, active = 0, completed = 0;
+    function onDone(t, rec) {
+      combos[t.ci].runs[t.r] = rec;
+      active--; completed++; done++;
+      onProgress({ done: done, total: total, comboIndex: t.ci, repeat: t.r });
+      if (completed >= total) { resolve(finish()); return; }
+      launch();
+    }
+    function launch() {
+      while (active < concurrency && next < total) {
+        var t = tasks[next++]; active++;
+        runOne(t).then((function (tt) { return function (rec) { onDone(tt, rec); }; })(t));
+      }
+    }
+    launch();
+  });
+
+  function finish() {
+    combos.forEach(function (c) {
+      for (var i = 0; i < repeats; i++) if (!c.runs[i]) c.runs[i] = { output: '', usage: null, ms: 0, tokPerSec: null, error: { type: 'skipped', message: 'not run' } };
+      c.agg = aggregateRuns(c.runs);
+    });
+    var stats = {
+      comboCount: combos.length, repeats: repeats, totalRuns: total,
+      okRuns: combos.reduce(function (s, c) { return s + c.agg.okCount; }, 0),
+      errRuns: combos.reduce(function (s, c) { return s + c.agg.errCount; }, 0),
+      aborted: aborted(signal),
+    };
+    var result = { op: 'sweep', combos: combos, axes: axes, axisKeys: Object.keys(axes), stats: stats, provider: 'server' };
+    if (opts.judge && opts.judge.enabled && combos.length >= 1 && !aborted(signal)) {
+      return runSweepJudge(prompt, combos, opts).then(function (jr) { result.judge = jr; return result; });
+    }
+    return result;
+  }
+}
+
+/* ==========================================================================
+   F. BENCHMARK — 엔드포인트 부하/지연 벤치마킹 (additive · 순수 로직)
+   "이 모델 서버가 얼마나 잘 도나"의 정답지: 고정 프롬프트를 다수 요청·동시성으로
+   발사해 지연 분포(TTFT·총지연 p50/p90/p95/p99)·처리량(req/s, tok/s)·에러율 측정.
+   동시성 스윕으로 처리량-지연 곡선. 커널(스트리밍)로 TTFT 계측, 벽시계로 처리량.
+
+   지표 정의(정확성 최우선):
+     percentile(sorted,p) : nearest-rank — idx = ceil(p/100 * n) - 1 (0-base, clamp)
+     throughput req/s     = 완료요청수 / 측정구간 벽시계경과초
+     tokens/s(집계)       = Σ completion_tokens(성공) / 측정구간 벽시계경과초
+     error rate           = 실패요청 / 총(측정)요청
+   워밍업은 별도 사전 구간에서 실행되어 통계·throughput 벽시계에서 완전 제외된다.
+   percentile/총지연 요약은 성공 요청만 대상(실패는 errorRate로 집계).
+   ========================================================================== */
+
+// nearest-rank 백분위수 — sorted: 오름차순 정렬된 숫자 배열, p: 0~100
+function percentile(sorted, p) {
+  sorted = sorted || [];
+  var n = sorted.length;
+  if (!n) return null;
+  var idx = Math.ceil((p / 100) * n) - 1;
+  if (idx < 0) idx = 0;
+  if (idx > n - 1) idx = n - 1;
+  return sorted[idx];
+}
+
+// 지연 배열 → 요약 통계 {count,min,p50,p90,p95,p99,max,mean}
+function summarize(latencies) {
+  var a = (latencies || []).filter(function (x) { return typeof x === 'number' && !isNaN(x); }).slice().sort(function (x, y) { return x - y; });
+  var n = a.length;
+  if (!n) return { count: 0, min: null, p50: null, p90: null, p95: null, p99: null, max: null, mean: null };
+  var sum = a.reduce(function (s, x) { return s + x; }, 0);
+  return {
+    count: n, min: a[0], max: a[n - 1], mean: sum / n,
+    p50: percentile(a, 50), p90: percentile(a, 90), p95: percentile(a, 95), p99: percentile(a, 99),
+  };
+}
+
+// 단일 요청 계측 — 스트리밍 호출로 TTFT 확보, 벽시계 폴백. 실패해도 resolve.
+// 반환: { ttftMs, totalMs, ok, error, completionTokens }
+function benchOneRequest(reqOpts, signal) {
+  var reqStart = now();
+  var firstAt = 0;
+  if (aborted(signal)) {
+    return Promise.resolve({ ttftMs: null, totalMs: 0, ok: false, error: { type: 'aborted', message: 'aborted' }, completionTokens: 0 });
+  }
+  return Promise.resolve(K().run({
+    module: 'bench', profile: reqOpts.profile, profileId: reqOpts.profileId, model: reqOpts.model,
+    useProxy: reqOpts.useProxy, stream: true,
+    params: Object.assign({}, reqOpts.params, { max_tokens: reqOpts.maxTokens, stream: true }),
+    messages: [{ role: 'user', content: reqOpts.prompt }],
+    reasoningEnabled: false, signal: signal,
+    onToken: function () { if (!firstAt) firstAt = now(); },
+  })).then(function (res) {
+    res = res || { ok: false, content: '', error: { message: 'no result' }, timing: {}, usage: null };
+    var reqEnd = now();
+    var t = res.timing || {};
+    var ttft = (t.ttftMs != null) ? t.ttftMs : (firstAt ? Math.round(firstAt - reqStart) : null);
+    var totalMs = (t.totalMs != null) ? t.totalMs : Math.round(reqEnd - reqStart);
+    var ct = res.usage ? (Number(res.usage.completion_tokens) || 0) : 0;
+    return { ttftMs: ttft, totalMs: totalMs, ok: !!res.ok, error: res.ok ? null : (res.error || { message: 'error' }), completionTokens: ct };
+  }).catch(function (e) {
+    var reqEnd = now();
+    return { ttftMs: firstAt ? Math.round(firstAt - reqStart) : null, totalMs: Math.round(reqEnd - reqStart), ok: false, error: { type: 'exception', message: String(e && e.message || e) }, completionTokens: 0 };
+  });
+}
+
+// 동시성 풀 — count개 작업을 최대 concurrency 동시 실행. peak 동시성 추적.
+// runTask(i)->Promise<rec>. onEach(rec,i) 진행 콜백. 반환 {recs, peak}.
+function benchPool(count, concurrency, runTask, onEach) {
+  return new Promise(function (resolve) {
+    if (count <= 0) { resolve({ recs: [], peak: 0 }); return; }
+    var recs = new Array(count);
+    var next = 0, active = 0, completed = 0, peak = 0;
+    function launch() {
+      while (active < concurrency && next < count) {
+        var i = next++; active++;
+        if (active > peak) peak = active;
+        runTask(i).then((function (k) {
+          return function (rec) {
+            recs[k] = rec; active--; completed++;
+            if (onEach) onEach(rec, k);
+            if (completed >= count) { resolve({ recs: recs, peak: peak }); return; }
+            launch();
+          };
+        })(i));
+      }
+    }
+    launch();
+  });
+}
+
+// 완료된 요청 계측 → 최종 벤치 요약 조립
+function finalizeBench(perRequest, wallMs, concurrency, requests, warmup, peakActive, signal) {
+  var okRecs = perRequest.filter(function (r) { return r && r.ok; });
+  var failed = perRequest.length - okRecs.length;
+  var ttftVals = okRecs.map(function (r) { return r.ttftMs; }).filter(function (x) { return typeof x === 'number' && !isNaN(x); });
+  var totalVals = okRecs.map(function (r) { return r.totalMs; }).filter(function (x) { return typeof x === 'number' && !isNaN(x); });
+  var wallSec = wallMs / 1000;
+  var completed = perRequest.length;
+  var totalTokens = okRecs.reduce(function (s, r) { return s + (Number(r.completionTokens) || 0); }, 0);
+  var reqPerSec = wallSec > 0 ? completed / wallSec : 0;
+  var tokPerSec = wallSec > 0 ? totalTokens / wallSec : 0;
+  return {
+    op: 'bench',
+    perRequest: perRequest,
+    ttft: summarize(ttftVals),
+    total: summarize(totalVals),
+    throughput: { reqPerSec: reqPerSec, tokPerSec: tokPerSec, totalTokens: totalTokens },
+    errorRate: perRequest.length ? failed / perRequest.length : 0,
+    concurrency: concurrency, requests: requests, warmup: warmup,
+    wallMs: wallMs, peakConcurrency: peakActive,
+    okCount: okRecs.length, failCount: failed,
+    aborted: aborted(signal),
+    provider: 'server',
+  };
+}
+
+// 벤치마크 실행 — 고정 프롬프트를 requests회, 동시성 concurrency로 발사.
+// opts: { prompt, requests, concurrency, warmup?, maxTokens?, profile|profileId, model,
+//         params?, useProxy, onProgress, signal }
+// 반환: { op:'bench', perRequest:[{ttftMs,totalMs,ok,error,completionTokens}], ttft:summary,
+//         total:summary, throughput:{reqPerSec,tokPerSec}, errorRate, concurrency, requests, wallMs, ... }
+function runBenchmark(opts) {
+  opts = opts || {};
+  var prompt = opts.prompt != null ? String(opts.prompt) : 'ping';
+  var requests = Math.max(1, Math.floor(opts.requests || 20));
+  var concurrency = Math.max(1, Math.min(64, Math.floor(opts.concurrency || 1)));
+  var warmup = Math.max(0, Math.floor(opts.warmup || 0));
+  var maxTokens = Math.max(1, Math.floor(opts.maxTokens || 64));
+  var signal = opts.signal;
+  var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
+  var reqOpts = {
+    prompt: prompt, profile: opts.profile, profileId: opts.profileId, model: opts.model,
+    useProxy: opts.useProxy, params: opts.params || {}, maxTokens: maxTokens,
+  };
+
+  var totalToRun = warmup + requests;
+  var doneAll = 0, peakActive = 0;
+
+  // 1) 워밍업 구간 — 통계/throughput 벽시계에서 제외
+  return benchPool(warmup, concurrency,
+    function () { return benchOneRequest(reqOpts, signal); },
+    function () { doneAll++; onProgress({ phase: 'warmup', done: doneAll, total: totalToRun }); }
+  ).then(function (warmRes) {
+    if (warmRes.peak > peakActive) peakActive = warmRes.peak;
+    // 2) 측정 구간 — 벽시계 시작
+    var wallStart = now();
+    return benchPool(requests, concurrency,
+      function () { return benchOneRequest(reqOpts, signal); },
+      function () { doneAll++; onProgress({ phase: 'measure', done: doneAll, total: totalToRun }); }
+    ).then(function (measRes) {
+      var wallMs = Math.round(now() - wallStart);
+      if (measRes.peak > peakActive) peakActive = measRes.peak;
+      return finalizeBench(measRes.recs, wallMs, concurrency, requests, warmup, peakActive, signal);
+    });
+  });
+}
+
+// 동시성 스윕 — 각 동시성 레벨에서 runBenchmark 실행(레벨 간 순차) → 처리량-지연 곡선.
+// opts: runBenchmark 옵션 + { concurrencyLevels:[1,2,4,8] }
+// 반환: { op:'concurrencySweep', levels:[{concurrency,reqPerSec,tokPerSec,ttftP95,totalP95,errorRate,...,bench}], concurrencyLevels }
+function runConcurrencySweep(opts) {
+  opts = opts || {};
+  var levelsIn = (opts.concurrencyLevels && opts.concurrencyLevels.length) ? opts.concurrencyLevels : [1, 2, 4, 8];
+  var signal = opts.signal;
+  var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
+  var results = [];
+
+  return levelsIn.reduce(function (chain, lvl, idx) {
+    return chain.then(function () {
+      if (aborted(signal)) return;
+      var conc = Math.max(1, Math.floor(lvl));
+      return runBenchmark(Object.assign({}, opts, {
+        concurrency: conc,
+        onProgress: function (pr) { onProgress(Object.assign({ level: conc, levelIndex: idx, levelCount: levelsIn.length }, pr)); },
+      })).then(function (bench) {
+        results.push({
+          concurrency: conc,
+          reqPerSec: bench.throughput.reqPerSec,
+          tokPerSec: bench.throughput.tokPerSec,
+          ttftP50: bench.ttft.p50, ttftP95: bench.ttft.p95,
+          totalP50: bench.total.p50, totalP95: bench.total.p95,
+          errorRate: bench.errorRate, wallMs: bench.wallMs,
+          okCount: bench.okCount, failCount: bench.failCount,
+          peakConcurrency: bench.peakConcurrency,
+          bench: bench,
+        });
+      });
+    });
+  }, Promise.resolve()).then(function () {
+    return {
+      op: 'concurrencySweep', levels: results, concurrencyLevels: levelsIn,
+      requests: Math.max(1, Math.floor(opts.requests || 20)),
+      aborted: aborted(signal), provider: 'server',
+    };
+  });
+}
+
+/* ==========================================================================
+   노출 (window.LLMLab.agent / .eval / .sim / .batch / .sweep / .bench)
    ========================================================================== */
 L.agent = {
   runReAct: runReAct,
@@ -621,11 +1363,47 @@ L.eval = {
   parseDataset: parseDataset,
   _parseCSV: parseCSV,
   _lcsDiff: lcsDiff,
+  // ── 검색 평가(Retrieval Eval) — additive ──
+  dcg: dcg,
+  ndcg: ndcg,
+  mrr: mrr,
+  recallAtK: recallAtK,
+  precisionAtK: precisionAtK,
+  averagePrecision: averagePrecision,
+  retrievalMetrics: retrievalMetrics,
+  runRetrievalEval: runRetrievalEval,
+  normalizeLabels: normalizeLabels,
+  _toRelSet: toRelSet,
 };
 L.sim = {
   runSimulation: runSimulation,
   buildMessages: buildSimMessages,
   metrics: simMetrics,
+};
+L.batch = {
+  parseDataset: parseBatchDataset,
+  interpolate: batchInterpolate,
+  runBatch: runBatch,
+  toCSV: batchToCSV,
+  toJSONL: batchToJSONL,
+  _rowsFromCSV: rowsFromCSV,
+  _rowsFromObjects: rowsFromObjects,
+};
+L.sweep = {
+  expandGrid: expandGrid,
+  runSweep: runSweep,
+  aggregateRuns: aggregateRuns,
+  distinctRatio: distinctRatio,
+  _coerceValue: coerceValue,
+};
+L.bench = {
+  percentile: percentile,
+  summarize: summarize,
+  histogram: histogram,
+  runBenchmark: runBenchmark,
+  runConcurrencySweep: runConcurrencySweep,
+  _benchOneRequest: benchOneRequest,
+  _benchPool: benchPool,
 };
 
 if (typeof window !== 'undefined') window.LLMLab = L;

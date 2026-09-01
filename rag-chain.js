@@ -511,6 +511,195 @@ function buildContext(results, opts) {
 }
 
 /* ============================================================
+   5b. Reranker (retrieve→fuse→rerank 2단계) — 독립 스테이지  [additive]
+       입력: {query, candidates:[{id|chunkId,text,score,rank}], method:'llm'|'endpoint',
+              topN, profile/profileId, model, params, endpoint?}
+       반환: {op:'rerank', method, provider, ok, before[], after[], moved[], trace, ...}
+   ============================================================ */
+function stripFences(s) {
+  return String(s == null ? '' : s).replace(/```(?:json|JSON)?/g, '').replace(/```/g, '').trim();
+}
+// 배치 LLM 응답 텍스트 → {candId: score}  (실패 시 null)
+function parseRerankScores(text, cands) {
+  var t = stripFences(text);
+  var m = t.match(/\[[\s\S]*\]/);
+  if (!m) return null;
+  var arr;
+  try { arr = JSON.parse(m[0]); } catch (e) { return null; }
+  if (!Array.isArray(arr)) return null;
+  var byId = {}; cands.forEach(function (c) { byId[String(c.id)] = c; });
+  var map = {};
+  arr.forEach(function (o) {
+    if (!isObj(o)) return;
+    var sc = Number(o.score != null ? o.score : (o.relevance != null ? o.relevance : o.rating));
+    if (!isFinite(sc)) return;
+    var key = null;
+    if (o.id != null && byId[String(o.id)]) key = String(o.id);
+    else if (o.i != null && cands[o.i]) key = String(cands[o.i].id);
+    else if (o.index != null && cands[o.index]) key = String(cands[o.index].id);
+    if (key != null) map[key] = sc;
+  });
+  return Object.keys(map).length ? map : null;
+}
+
+// LLM 배치 채점(pointwise, 한 번의 호출)
+async function llmRerankBatch(query, cands, ctx) {
+  var listing = cands.map(function (c, i) {
+    return '[' + i + '] ' + String(c.text).replace(/\s+/g, ' ').slice(0, 320);
+  }).join('\n');
+  var prompt = '질의에 대한 각 문서의 관련도를 0~10 정수로 채점하라. 반드시 JSON 배열만 출력(코드펜스·설명 금지): ' +
+    '[{"i":0,"score":8}, {"i":1,"score":3}, ...]\n\n질의: ' + query + '\n\n문서들:\n' + listing;
+  var r = await kernelText({
+    module: 'rag', profile: ctx.profile, profileId: ctx.profileId, model: ctx.model, useProxy: ctx.useProxy,
+    params: Object.assign({ max_tokens: 400, temperature: 0, stream: false }, ctx.llmParams),
+    messages: [{ role: 'user', content: prompt }], signal: ctx.signal, reasoningEnabled: false,
+  });
+  var trace = { stage: 'llm-batch', ok: false, provider: 'server', prompt: prompt, raw: r.text || '', count: cands.length };
+  if (!r.ok) { trace.error = r.error; return { ok: false, error: r.error, trace: trace }; }
+  var map = parseRerankScores(r.text, cands);
+  if (!map) { trace.note = 'JSON 파싱 실패 → 개별 채점 폴백'; return { ok: false, error: { type: 'parse', message: 'JSON 파싱 실패' }, trace: trace }; }
+  trace.ok = true; trace.scores = map;
+  return { ok: true, scoreMap: map, mode: 'llm-batch', trace: trace };
+}
+
+// LLM 개별 채점 폴백(후보별 1콜, 숫자만)
+async function llmRerankPerCandidate(query, cands, ctx) {
+  var trace = { stage: 'llm-pointwise', ok: false, provider: 'server', count: cands.length, items: [] };
+  var map = {}, anyOk = false;
+  for (var i = 0; i < cands.length; i++) {
+    if (ctx.signal && ctx.signal.aborted) break;
+    var c = cands[i];
+    var prompt = '질의와 문서의 관련도를 0~10 정수 하나로만 답하라(숫자만, 설명 금지).\n질의: ' + query +
+      '\n문서: ' + String(c.text).replace(/\s+/g, ' ').slice(0, 400);
+    var r = await kernelText({
+      module: 'rag', profile: ctx.profile, profileId: ctx.profileId, model: ctx.model, useProxy: ctx.useProxy,
+      params: Object.assign({ max_tokens: 12, temperature: 0, stream: false }, ctx.llmParams),
+      messages: [{ role: 'user', content: prompt }], signal: ctx.signal, reasoningEnabled: false,
+    });
+    var sc = null;
+    if (r.ok) { var mm = String(r.text).match(/-?\d+(?:\.\d+)?/); if (mm) sc = Number(mm[0]); }
+    if (sc != null && isFinite(sc)) { map[String(c.id)] = sc; anyOk = true; }
+    trace.items.push({ id: c.id, ok: sc != null, score: sc });
+  }
+  if (!anyOk) { trace.error = { type: 'rerank', message: '개별 채점 전부 실패' }; return { ok: false, error: trace.error, trace: trace }; }
+  trace.ok = true; trace.scores = map;
+  return { ok: true, scoreMap: map, mode: 'llm-pointwise', trace: trace };
+}
+
+// 전용 rerank 엔드포인트(Cohere /rerank 스타일)
+async function endpointRerank(query, cands, opts, ctx) {
+  var url = opts.endpoint || (opts.params && opts.params.endpoint) || '';
+  var trace = { stage: 'endpoint', ok: false, provider: 'server', url: url };
+  if (!url) { trace.error = { type: 'config', message: 'rerank 엔드포인트 URL이 없습니다.' }; return { ok: false, error: trace.error, trace: trace }; }
+  var util = L.util;
+  var documents = cands.map(function (c) { return String(c.text); });
+  var body = { query: query, documents: documents, top_n: cands.length };
+  if (opts.rerankModel) body.model = opts.rerankModel;
+  var headers = { 'Content-Type': 'application/json' };
+  if (opts.headers) { Object.keys(opts.headers).forEach(function (k) { headers[k] = opts.headers[k]; }); }
+  else if (opts.profile && L.kernel && L.kernel.buildHeaders) {
+    try { var b = L.kernel.buildHeaders(opts.profile, {}); if (b && b.headers) Object.keys(b.headers).forEach(function (k) { headers[k] = b.headers[k]; }); } catch (e) {}
+  }
+  var up = (opts.useProxy != null) ? opts.useProxy : (typeof location !== 'undefined' && location.protocol !== 'file:');
+  var relay;
+  try {
+    relay = await util.relayFetch(url, { method: 'POST', headers: headers, bodyText: JSON.stringify(body), useProxy: up, signal: ctx.signal });
+  } catch (e) { trace.error = { type: 'network', message: e.message || '요청 실패' }; return { ok: false, error: trace.error, trace: trace }; }
+  trace.status = relay.status;
+  if (relay.proxyError || relay.status < 200 || relay.status >= 300) {
+    trace.error = { type: 'http', message: 'rerank 엔드포인트 응답 ' + relay.status + (relay.proxyError ? ' (proxy)' : '') };
+    return { ok: false, error: trace.error, trace: trace };
+  }
+  var data;
+  try { data = await relay.res.json(); } catch (e) { trace.error = { type: 'parse', message: '응답 JSON 파싱 실패' }; return { ok: false, error: trace.error, trace: trace }; }
+  var results = data && (data.results || data.data);
+  if (!Array.isArray(results)) { trace.error = { type: 'format', message: 'results 배열 없음' }; return { ok: false, error: trace.error, trace: trace }; }
+  var map = {};
+  results.forEach(function (rr) {
+    var idx = (rr.index != null) ? rr.index : rr.i;
+    var sc = (rr.relevance_score != null) ? rr.relevance_score : (rr.score != null ? rr.score : rr.relevance);
+    if (idx != null && cands[idx] && sc != null && isFinite(Number(sc))) map[String(cands[idx].id)] = Number(sc);
+  });
+  if (!Object.keys(map).length) { trace.error = { type: 'format', message: '점수 매핑 실패' }; return { ok: false, error: trace.error, trace: trace }; }
+  trace.ok = true; trace.scores = map; trace.raw = data;
+  return { ok: true, scoreMap: map, raw: data, trace: trace };
+}
+
+async function rerank(opts) {
+  opts = opts || {};
+  var t0 = now();
+  var query = opts.query || '';
+  var input = Array.isArray(opts.candidates) ? opts.candidates : [];
+  var method = (opts.method === 'endpoint') ? 'endpoint' : 'llm';
+  var topN = Math.max(1, Number(opts.topN) || 10);
+  var trace = [];
+
+  // 후보 정규화 + 재정렬 전(before) 순위 캡처
+  var cands = input.slice(0, topN).map(function (c, i) {
+    var id = (c.id != null) ? c.id : (c.chunkId != null ? c.chunkId : ('cand-' + i));
+    return {
+      id: id, chunkId: (c.chunkId != null ? c.chunkId : id),
+      text: String(c.text == null ? '' : c.text),
+      origScore: (c.score != null) ? c.score : null,
+      fromRank: (c.rank != null) ? Number(c.rank) : (i + 1),
+      ref: c,
+    };
+  });
+  var before = cands.map(function (c) { return { id: c.id, chunkId: c.chunkId, rank: c.fromRank, score: c.origScore, text: c.text }; });
+
+  if (!cands.length) {
+    return { op: 'rerank', method: method, provider: 'browser', ok: false,
+      error: { type: 'input', message: '재랭킹할 후보가 없습니다.' }, before: before, after: [], moved: [], trace: trace, ms: 0 };
+  }
+
+  var ctx = { profile: opts.profile, profileId: opts.profileId, model: opts.model, useProxy: opts.useProxy,
+    signal: opts.signal, llmParams: (opts.params && opts.params.llm) || null };
+  var scoreMap = null, provider = 'browser', errored = null, scoreMode = null;
+
+  if (method === 'endpoint') {
+    var er = await endpointRerank(query, cands, opts, ctx);
+    trace.push(er.trace);
+    if (er.ok) { scoreMap = er.scoreMap; provider = 'server'; scoreMode = 'endpoint'; }
+    else errored = er.error;
+  } else {
+    var lr = await llmRerankBatch(query, cands, ctx);
+    trace.push(lr.trace);
+    if (lr.ok) { scoreMap = lr.scoreMap; provider = 'server'; scoreMode = lr.mode; }
+    else {
+      var pf = await llmRerankPerCandidate(query, cands, ctx);
+      trace.push(pf.trace);
+      if (pf.ok) { scoreMap = pf.scoreMap; provider = 'server'; scoreMode = pf.mode; }
+      else errored = pf.error || lr.error;
+    }
+  }
+
+  var after, moved;
+  if (scoreMap) {
+    cands.forEach(function (c) { c.rerankScore = (scoreMap[String(c.id)] != null) ? scoreMap[String(c.id)] : 0; });
+    // 점수 내림차순, 동점은 원순위 유지(안정)
+    var sorted = cands.slice().sort(function (a, b) {
+      if (b.rerankScore !== a.rerankScore) return b.rerankScore - a.rerankScore;
+      return a.fromRank - b.fromRank;
+    });
+    after = sorted.map(function (c, i) {
+      return { id: c.id, chunkId: c.chunkId, rank: i + 1, fromRank: c.fromRank,
+        score: c.rerankScore, origScore: c.origScore, delta: c.fromRank - (i + 1), text: c.text, ref: c.ref };
+    });
+  } else {
+    // 실패 → 원순위 유지
+    after = cands.map(function (c) {
+      return { id: c.id, chunkId: c.chunkId, rank: c.fromRank, fromRank: c.fromRank,
+        score: null, origScore: c.origScore, delta: 0, text: c.text, ref: c.ref };
+    });
+  }
+  moved = after.map(function (a) { return { id: a.id, chunkId: a.chunkId, from: a.fromRank, to: a.rank, delta: a.fromRank - a.rank }; });
+
+  return { op: 'rerank', method: method, scoreMode: scoreMode, provider: provider,
+    ok: !!scoreMap, error: errored, before: before, after: after, moved: moved, trace: trace,
+    ms: Math.round(now() - t0) };
+}
+
+/* ============================================================
    6. Graph (§8.4) — 소규모 LLM 추출(실동작) / 대형·실패 시 mock
    ============================================================ */
 function louvainish(nodes, edges) {
@@ -765,10 +954,12 @@ L.rag = {
   chunk: chunk,
   embed: embed,
   retrieve: retrieve,
+  rerank: rerank,
   buildContext: buildContext,
   buildGraph: buildGraph,
   // 프리미티브(테스트/재사용)
   _tokenize: tokenize, _cosine: cosine, _bm25: { build: buildBM25, scores: bm25Scores }, _rrf: rrfFuse, _approxEmbed: approxEmbed,
+  _parseRerankScores: parseRerankScores, _stripFences: stripFences,
 };
 L.chain = {
   run: runChain,

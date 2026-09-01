@@ -270,6 +270,7 @@ var TABS = [
   { id: 'chain', label: 'Chain',       icon: 'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1', ready: true },
   { id: 'agent', label: 'Agent/Tools', icon: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z', tag: '3단계' },
   { id: 'eval',  label: 'Eval/Bench',  icon: 'M3 3v18h18M18 17V9M13 17V5M8 17v-3', tag: '3단계' },
+  { id: 'batch', label: 'Batch',       icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', tag: 'NEW' },
   { id: 'sim',   label: 'Simulate',    icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', tag: '3단계' },
 ];
 var PLACEHOLDER_INFO = {
@@ -512,6 +513,7 @@ function switchTab(id) {
     else if (id === 'chain') CHAIN.build(panel);
     else if (id === 'agent') AGENT.build(panel);
     else if (id === 'eval') EVAL.build(panel);
+    else if (id === 'batch') BATCH.build(panel);
     else if (id === 'sim') SIM.build(panel);
     else if (id !== 'chat') buildPlaceholder(id);
   }
@@ -2100,6 +2102,7 @@ function labSection(title, hintNode) {
    ============================================================ */
 var RAG = (function () {
   var E = {};                 // element refs
+  var EV = {};                // 검색 평가(Eval) element refs
   var docs = [];              // [{id,title,text}]
   var index = null;           // {chunks, vectors, dim, embedProvider, chunkMs, embedMs}
   var lastResult = null;
@@ -2111,6 +2114,24 @@ var RAG = (function () {
     { id: 'doc-vector', title: '벡터 RAG', text: '벡터 RAG는 문서를 청크로 나누고 임베딩하여 코사인 유사도로 top-k를 검색한다. chunk_size와 overlap, top_k가 품질에 큰 영향을 준다. 벡터 검색은 어휘가 달라도 의미가 유사한 문서를 잘 찾지만, 전역적 요약 질문에는 약하다.' },
     { id: 'doc-hybrid', title: '하이브리드 검색', text: '하이브리드 검색은 BM25 키워드 검색과 밀집 벡터 검색을 각각 수행한 뒤 Reciprocal Rank Fusion으로 순위를 융합한다. RRF는 점수 스케일 보정 없이 순위만으로 융합하므로 강건하다. 재랭킹 단계에서 크로스인코더나 LLM으로 상위 후보를 재정렬한다.' },
   ];
+
+  // 검색 평가용 내장 데모 코퍼스(6문서) + 라벨셋(5질의 · 이진/등급 혼합)
+  var EVAL_CORPUS = [
+    { id: 'd-graphrag', title: 'GraphRAG', text: 'GraphRAG는 지식그래프를 구축하고 커뮤니티 탐지로 클러스터를 만든 뒤 각 커뮤니티를 요약한다. 전역 검색은 맵-리듀스로 커뮤니티 요약을 종합하여 전역적 질문에 답한다. 지역 검색은 질의와 가까운 엔티티에서 그래프를 순회한다.' },
+    { id: 'd-vector', title: '벡터 검색', text: '벡터 검색은 문서를 청크로 나누고 임베딩하여 코사인 유사도로 top-k를 검색한다. 밀집 임베딩은 어휘가 달라도 의미가 유사한 문서를 잘 찾는다. 쿼리 임베딩과 문서 임베딩의 코사인 유사도로 순위를 매긴다.' },
+    { id: 'd-hybrid', title: '하이브리드 융합', text: '하이브리드 검색은 BM25 키워드 검색과 밀집 벡터 검색을 각각 수행한 뒤 Reciprocal Rank Fusion(RRF)으로 두 순위를 융합한다. RRF는 점수 스케일 보정 없이 순위만으로 결합하므로 강건하다.' },
+    { id: 'd-bm25', title: 'BM25 희소 검색', text: 'BM25는 용어 빈도(TF)와 역문서빈도(IDF)에 문서 길이 정규화를 결합한 키워드 기반 희소 검색 랭킹 함수다. 정확한 키워드 매칭에 강하지만 동의어나 의미 유사성은 포착하지 못한다.' },
+    { id: 'd-rerank', title: '재랭킹', text: '재랭킹은 1차 검색으로 얻은 상위 후보를 크로스인코더나 LLM으로 다시 채점하여 재정렬한다. 크로스인코더는 질의와 문서를 함께 인코딩하여 정밀한 관련도를 산출하지만 비용이 크므로 상위 후보에만 적용한다.' },
+    { id: 'd-chunk', title: '청킹 전략', text: '청킹은 문서를 검색 단위로 분할하는 과정이다. chunk_size와 overlap이 검색 품질에 큰 영향을 준다. 너무 크면 노이즈가 섞이고 너무 작으면 문맥이 끊긴다. 문장/재귀 분할이 고정 분할보다 문맥 보존에 유리하다.' },
+  ];
+  var EVAL_LABELS = [
+    { query: '커뮤니티 요약으로 전역적 질문에 답하는 검색 기법은?', relevant: ['d-graphrag'] },
+    { query: 'BM25 키워드 검색과 밀집 벡터 검색을 RRF로 융합하는 방법', relevant: { 'd-hybrid': 3, 'd-bm25': 1, 'd-vector': 1 } },
+    { query: '임베딩 코사인 유사도로 top-k 문서를 찾는 방법', relevant: ['d-vector'] },
+    { query: '크로스인코더로 상위 후보를 다시 채점해 재정렬하는 리랭킹', relevant: ['d-rerank'] },
+    { query: 'chunk_size와 overlap이 검색 품질에 미치는 영향', relevant: ['d-chunk'] },
+  ];
+  var evalDemoIndex = null;   // 데모 코퍼스 인덱스 캐시
 
   function build(panel) {
     panel.dataset.built = '1';
@@ -2130,6 +2151,7 @@ var RAG = (function () {
 
     buildCorpusSection(inner);
     buildQuerySection(inner);
+    buildEvalSection(inner);
 
     // 결과 영역
     E.pipeline = el('section', { class: 'card lab-sec', hidden: true });
@@ -2267,7 +2289,20 @@ var RAG = (function () {
 
     E.hyde = mkToggle('HyDE');
     E.multi = mkToggle('Multi-Query');
-    E.rerank = mkToggle('LLM 재랭킹');
+    E.rerank = mkToggle('리랭크 (재정렬)');
+    E.rerank.input.addEventListener('change', updateRerankUI);
+
+    // 리랭크 상세 옵션 (토글 ON일 때 노출)
+    E.rrMethod = el('select', { class: 'field' });
+    [['llm', 'LLM (커널 채점)'], ['endpoint', 'Endpoint (Cohere류)']].forEach(function (m) { E.rrMethod.appendChild(el('option', { value: m[0], text: m[1] })); });
+    E.rrMethod.addEventListener('change', updateRerankUI);
+    E.rrTopN = el('input', { type: 'number', class: 'field field-num', min: 2, max: 50, step: 1, value: 10 });
+    E.rrUrl = el('input', { type: 'text', class: 'field field-mono', placeholder: 'https://…/rerank (Cohere 호환)' });
+    E.rrUrlRow = el('div', { class: 'param-mini' }, [el('label', { text: 'endpoint URL' }), E.rrUrl]);
+    E.rerankRow = el('div', { class: 'param-mini rerank-row', hidden: true }, [
+      el('label', { text: 'method' }), E.rrMethod,
+      el('label', { text: 'top_n' }), E.rrTopN,
+    ]);
 
     E.runBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '검색 실행' });
     E.runBtn.addEventListener('click', function () { runRetrieve(true); });
@@ -2296,10 +2331,27 @@ var RAG = (function () {
     ]));
     sec.appendChild(E.hybridRow);
     sec.appendChild(el('div', { class: 'lab-btnrow toggles' }, [E.hyde.wrap, E.multi.wrap, E.rerank.wrap]));
+    sec.appendChild(E.rerankRow);
+    sec.appendChild(E.rrUrlRow);
     sec.appendChild(el('div', { class: 'lab-btnrow' }, [E.runBtn, E.genBtn, E.cmpBtn]));
     inner.appendChild(sec);
     updateModeUI();
+    updateRerankUI();
     refreshBackends();
+  }
+  function updateRerankUI() {
+    if (!E.rerankRow) return;
+    var on = E.rerank.checked;
+    E.rerankRow.hidden = !on;
+    E.rrUrlRow.hidden = !(on && E.rrMethod.value === 'endpoint');
+  }
+  function rerankCfg() {
+    return {
+      enabled: E.rerank.checked,
+      method: E.rrMethod ? E.rrMethod.value : 'llm',
+      topN: E.rrTopN ? (Number(E.rrTopN.value) || 10) : 10,
+      endpoint: E.rrUrl ? E.rrUrl.value.trim() : '',
+    };
   }
   function refreshBackends() {
     if (!E.backend) return;
@@ -2336,14 +2388,20 @@ var RAG = (function () {
     E.hyde.wrap.style.display = (m === 'graph' || m === 'bm25') ? 'none' : '';
     E.multi.wrap.style.display = (m === 'graph') ? 'none' : '';
     E.rerank.wrap.style.display = (m === 'graph') ? 'none' : '';
+    if (E.rerankRow) { E.rerankRow.style.display = (m === 'graph') ? 'none' : ''; E.rrUrlRow.style.display = (m === 'graph') ? 'none' : ''; }
+    if (m !== 'graph') updateRerankUI();
   }
 
   function params() {
+    var rc = rerankCfg();
+    var baseTopK = Number(E.topk.value) || 4;
+    // 리랭크 ON: 후보 풀을 top_n까지 확장(retrieve는 fuse까지만 — 재정렬은 별도 rerank() 스테이지).
+    var effTopK = rc.enabled ? Math.max(baseTopK, rc.topN) : baseTopK;
     return {
-      top_k: Number(E.topk.value) || 4,
+      top_k: effTopK,
       hybrid: { alpha: Number(E.alpha.value), rrf_k: Number(E.rrfk.value) || 60 },
       hyde: E.hyde.checked, multiQuery: E.multi.checked,
-      rerank: { enabled: E.rerank.checked, provider: 'llm', top_n: Math.max(8, (Number(E.topk.value) || 4) * 2) },
+      rerank: { enabled: false },   // 인라인 재랭킹 비활성 — L.rag.rerank() 독립 스테이지 사용
     };
   }
 
@@ -2386,13 +2444,48 @@ var RAG = (function () {
       query: q, mode: mode, params: params(), profile: p, model: profileModel(p), useProxy: state.ui.useProxy,
       dbConnId: dbId,
     }).then(function (res) {
-      lastResult = res; busy = false; setBusy(false);
+      lastResult = res;
       var stages = [{ name: 'chunk', ms: index.chunkMs, count: index.chunks.length, provider: 'browser' },
                     { name: 'embed', ms: index.embedMs, count: index.chunks.length, provider: index.embedProvider }].concat(res.stages);
+      var rc = rerankCfg();
+      // ── retrieve→fuse→rerank: 융합 결과 상위 후보를 별도 rerank() 스테이지로 재정렬 ──
+      if (rc.enabled && res.results && res.results.length) {
+        var cand = res.results.map(function (r, i) {
+          return { id: r.chunkId, chunkId: r.chunkId, text: r.text, score: r.score, rank: i + 1 };
+        });
+        return L.rag.rerank({
+          query: q, candidates: cand, method: rc.method, topN: rc.topN, endpoint: rc.endpoint,
+          profile: p, profileId: p.id, model: profileModel(p), useProxy: state.ui.useProxy,
+        }).then(function (rr) {
+          applyRerank(res, rr);
+          stages.push({ name: 'rerank(' + rr.method + ')', ms: rr.ms, count: rr.after.length,
+            provider: rr.provider,
+            note: rr.ok ? (rr.scoreMode || '') : ('실패 — 원순위 유지' + (rr.error ? ': ' + (rr.error.message || rr.error.type || '') : '')) });
+          busy = false; setBusy(false);
+          renderStepper(stages);
+          if (render) renderResults(res, null);
+          return res;
+        });
+      }
+      busy = false; setBusy(false);
       renderStepper(stages);
       if (render) renderResults(res, null);
       return res;
     });
+  }
+
+  // rerank 결과를 res.results에 반영(재정렬 + signals.rerank 주입)
+  function applyRerank(res, rr) {
+    res.rerank = rr;
+    if (!rr || !rr.ok) return;   // 실패 시 원순위 유지
+    var byId = {}; (res.results || []).forEach(function (r) { byId[r.chunkId] = r; });
+    var reordered = [];
+    rr.after.forEach(function (a) {
+      var r = byId[a.id] != null ? byId[a.id] : byId[a.chunkId];
+      if (r) { r.signals = r.signals || {}; r.signals.rerank = a.score; reordered.push(r); }
+    });
+    (res.results || []).forEach(function (r) { if (reordered.indexOf(r) < 0) reordered.push(r); });
+    res.results = reordered;
   }
 
   function runRetrieveAndGenerate() {
@@ -2440,6 +2533,10 @@ var RAG = (function () {
     // 3열 랭킹 비교(hybrid)
     if (res && res.mode === 'hybrid' && res.lists && res.lists.fused) {
       E.results.appendChild(buildRankCompare(res));
+    }
+    // 리랭킹 전/후 비교
+    if (res && res.rerank) {
+      E.results.appendChild(buildRerankCompare(res.rerank));
     }
     // 근거 청크
     var chunkSec = labSection('Retrieved Chunks (' + (res && res.results ? res.results.length : 0) + ')', provBadge(res ? res.provider : 'browser'));
@@ -2508,6 +2605,46 @@ var RAG = (function () {
       });
       grid.appendChild(box);
     });
+    sec.appendChild(el('div', { class: 'scroll-x' }, [grid]));
+    return sec;
+  }
+
+  // 리랭킹 전/후 비교 뷰 — 융합 순위 → rerank 순위, 이동(▲/▼)·점수 표시
+  function buildRerankCompare(rr) {
+    var methodLabel = rr.method === 'endpoint' ? 'Endpoint' : 'LLM';
+    var sec = labSection('리랭킹 · 재정렬 전/후 (' + methodLabel + (rr.scoreMode ? ' · ' + rr.scoreMode : '') + ')', provBadge(rr.provider));
+    if (!rr.ok) {
+      sec.appendChild(el('div', { class: 'lab-note lab-note--warn' }, [
+        el('b', { text: '재정렬 실패 — 원순위 유지. ' }),
+        el('span', { text: rr.error ? ('(' + (rr.error.type || '') + ') ' + (rr.error.message || '')) : '' }),
+      ]));
+    }
+    // 요약 스탯: 이동한 후보 수
+    var movedN = (rr.moved || []).filter(function (m) { return m.delta !== 0; }).length;
+    sec.appendChild(el('div', { class: 'lab-note', text: '후보 ' + (rr.after ? rr.after.length : 0) + '개 · 순위 변동 ' + movedN + '개 · ' + rr.ms + 'ms' }));
+
+    var beforeById = {}; (rr.before || []).forEach(function (b) { beforeById[String(b.id)] = b; });
+    var beforeCol = el('div', { class: 'rr-col' }, [el('div', { class: 'rr-col__h', text: '재정렬 전 (융합 순위)' })]);
+    (rr.before || []).forEach(function (b) {
+      beforeCol.appendChild(el('div', { class: 'rr-item' }, [
+        el('span', { class: 'rr-item__r mono', text: '#' + b.rank }),
+        el('span', { class: 'rr-item__t', text: (b.text || '').replace(/\s+/g, ' ').slice(0, 80) }),
+        el('span', { class: 'rr-item__s mono', text: b.score != null ? b.score.toFixed(4) : '—' }),
+      ]));
+    });
+    var afterCol = el('div', { class: 'rr-col' }, [el('div', { class: 'rr-col__h', text: '재정렬 후 (rerank 점수)' })]);
+    (rr.after || []).forEach(function (a) {
+      var cls = a.delta > 0 ? 'rr-up' : (a.delta < 0 ? 'rr-down' : 'rr-same');
+      var arrow = a.delta > 0 ? ('▲' + a.delta) : (a.delta < 0 ? ('▼' + (-a.delta)) : '=');
+      afterCol.appendChild(el('div', { class: 'rr-item ' + cls }, [
+        el('span', { class: 'rr-item__r mono', text: '#' + a.rank }),
+        el('span', { class: 'rr-item__from mono', text: '전 #' + a.fromRank }),
+        el('span', { class: 'rr-item__d ' + cls, text: arrow }),
+        el('span', { class: 'rr-item__t', text: (a.text || '').replace(/\s+/g, ' ').slice(0, 70) }),
+        el('span', { class: 'rr-item__s mono', text: a.score != null ? ('' + a.score) : '—' }),
+      ]));
+    });
+    var grid = el('div', { class: 'rr-grid' }, [beforeCol, afterCol]);
     sec.appendChild(el('div', { class: 'scroll-x' }, [grid]));
     return sec;
   }
@@ -2586,6 +2723,223 @@ var RAG = (function () {
   function setBusy(on) {
     E.runBtn.disabled = on; E.genBtn.disabled = on; E.cmpBtn.disabled = on;
     E.runBtn.textContent = on ? '실행 중…' : '검색 실행';
+  }
+
+  /* ============================================================
+     3 · 검색 평가 (Retrieval Eval) — nDCG · MRR · Recall · Precision · MAP
+     ============================================================ */
+  var METHOD_LABELS = { bm25: 'BM25', dense: 'Dense (Vector)', hybrid: 'Hybrid (RRF)', 'hybrid+rerank': 'Hybrid + Rerank' };
+
+  function buildEvalSection(inner) {
+    var sec = labSection('3 · 검색 평가 (Retrieval Eval)', provBadge('browser'));
+    sec.appendChild(el('div', { class: 'lab-note', text: '라벨된 질의셋에 대해 검색 방법을 실행하고 nDCG · MRR · Recall · Precision · MAP를 계산해 정량 비교합니다. 라벨: [\"docId\",…](이진) 또는 {\"docId\":grade}(등급).' }));
+
+    // 코퍼스 소스
+    EV.corpus = el('select', { class: 'field' });
+    [['demo', '데모 코퍼스 (내장 6문서)'], ['current', '현재 인덱스 (위에서 구축한 코퍼스)']].forEach(function (o) { EV.corpus.appendChild(el('option', { value: o[0], text: o[1] })); });
+
+    // 라벨셋 입력
+    EV.labels = el('textarea', { class: 'field field-mono', rows: 6, placeholder: '라벨셋(JSON 배열 또는 JSONL)…\n[{"query":"…","relevant":["docId1","docId2"]},\n {"query":"…","relevant":{"docId1":3,"docId2":1}}]' });
+    var demoBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '데모 라벨셋 로드' });
+    demoBtn.addEventListener('click', function () {
+      EV.corpus.value = 'demo';
+      EV.labels.value = JSON.stringify(EVAL_LABELS, null, 2);
+      toast('데모 라벨셋 5질의 로드 (데모 코퍼스 6문서)');
+    });
+    var clearBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '비우기' });
+    clearBtn.addEventListener('click', function () { EV.labels.value = ''; });
+
+    // 방법 체크
+    EV.methods = {};
+    var methodRow = el('div', { class: 'lab-btnrow toggles' });
+    [['bm25', true], ['dense', true], ['hybrid', true], ['hybrid+rerank', false]].forEach(function (m) {
+      var input = el('input', { type: 'checkbox' }); input.checked = m[1];
+      EV.methods[m[0]] = input;
+      methodRow.appendChild(el('label', { class: 'chk' }, [input, el('span', { text: METHOD_LABELS[m[0]] })]));
+    });
+
+    // k 설정
+    EV.ks = el('input', { type: 'text', class: 'field field-mono', value: '5,10', placeholder: '5,10' });
+
+    EV.runBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '평가 실행' });
+    EV.runBtn.addEventListener('click', runRetrievalEval);
+    EV.status = el('span', { class: 'field-note' });
+
+    sec.appendChild(el('div', { class: 'param-mini' }, [
+      el('label', { text: '코퍼스' }), EV.corpus,
+      el('label', { text: 'k (쉼표)' }), EV.ks,
+    ]));
+    sec.appendChild(el('div', { class: 'field-col' }, [
+      EV.labels,
+      el('div', { class: 'lab-btnrow' }, [demoBtn, clearBtn]),
+    ]));
+    sec.appendChild(el('div', { class: 'field-note', text: '비교할 검색 방법:' }));
+    sec.appendChild(methodRow);
+    sec.appendChild(el('div', { class: 'lab-btnrow' }, [EV.runBtn, EV.status]));
+    EV.out = el('div', { class: 'eval-out' });
+    sec.appendChild(EV.out);
+    inner.appendChild(sec);
+
+    // 데모 라벨셋 기본 프리필(즉시 실행 가능하도록)
+    EV.labels.value = JSON.stringify(EVAL_LABELS, null, 2);
+  }
+
+  function parseKs(s) {
+    var ks = String(s || '').split(/[,\s]+/).map(function (x) { return parseInt(x, 10); }).filter(function (n) { return n > 0; });
+    return ks.length ? ks.filter(function (n, i, a) { return a.indexOf(n) === i; }).sort(function (a, b) { return a - b; }) : [5, 10];
+  }
+  function parseLabelset(text) {
+    text = String(text || '').trim();
+    if (!text) return [];
+    // JSON 배열 우선
+    if (text[0] === '[') { try { var a = JSON.parse(text); if (Array.isArray(a)) return a; } catch (e) {} }
+    // 단일 객체
+    if (text[0] === '{' && text.indexOf('\n') < 0) { try { var o = JSON.parse(text); if (o && o.query) return [o]; } catch (e) {} }
+    // JSONL (줄마다 객체)
+    var out = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      line = line.trim(); if (!line || line === '[' || line === ']') return;
+      if (line.slice(-1) === ',') line = line.slice(0, -1);
+      try { var r = JSON.parse(line); if (r && r.query) out.push(r); } catch (e) {}
+    });
+    return out;
+  }
+
+  // 데모 코퍼스 인덱스(청킹 + approx 임베딩, 오프라인 결정적) — 캐시
+  function ensureEvalDemoIndex() {
+    if (evalDemoIndex) return Promise.resolve(evalDemoIndex);
+    var res = L.rag.chunk({ docs: EVAL_CORPUS, method: 'sentence', size: 400, overlap: 0 });
+    return L.rag.embed({ chunks: res.chunks, allowServer: false, useProxy: false, dim: 256 }).then(function (emb) {
+      evalDemoIndex = { chunks: res.chunks, vectors: emb.vectors, dim: emb.dim, embedProvider: 'approx' };
+      return evalDemoIndex;
+    });
+  }
+
+  // 검색 → docId 랭킹(중복 제거, 순위 보존)
+  function evalRetrieveFn(idx, allowRerank) {
+    return function (query, method) {
+      var mode = method === 'bm25' ? 'bm25' : (method === 'dense' ? 'vector' : 'hybrid');
+      var doRerank = (method === 'hybrid+rerank') && allowRerank;
+      var maxK = Math.min(idx.chunks.length || 10, 50);
+      return L.rag.retrieve({
+        chunks: idx.chunks, vectors: idx.vectors, dim: idx.dim, embedProvider: idx.embedProvider,
+        query: query, mode: mode,
+        params: { top_k: maxK, hybrid: { alpha: 0.5, rrf_k: 60 }, rerank: doRerank ? { enabled: true, top_n: maxK } : { enabled: false } },
+        profile: doRerank ? activeProfile() : null, model: doRerank ? profileModel(activeProfile()) : undefined,
+        useProxy: state.ui.useProxy,
+      }).then(function (res) {
+        var seen = {}, ids = [];
+        (res.results || []).forEach(function (r) { var d = r.docId; if (d != null && !seen[d]) { seen[d] = true; ids.push(d); } });
+        return ids;
+      });
+    };
+  }
+
+  function runRetrievalEval() {
+    var dataset = parseLabelset(EV.labels.value);
+    if (!dataset.length) { toast('라벨셋을 입력하거나 "데모 라벨셋 로드"를 누르세요.', 'warn'); return; }
+    var methods = Object.keys(EV.methods).filter(function (m) { return EV.methods[m].checked; });
+    if (!methods.length) { toast('비교할 방법을 하나 이상 선택하세요.', 'warn'); return; }
+    var ks = parseKs(EV.ks.value);
+    var useCurrent = EV.corpus.value === 'current';
+
+    // rerank는 활성 연결이 있을 때만 실제 수행(없으면 hybrid 순위로 폴백 — 결정적, 네트워크 없음)
+    var hasProfile = !!activeProfile();
+    if (methods.indexOf('hybrid+rerank') >= 0 && !hasProfile) {
+      toast('활성 연결이 없어 Hybrid+Rerank는 Hybrid 순위로 폴백됩니다.', 'warn');
+    }
+
+    EV.runBtn.disabled = true; EV.runBtn.textContent = '평가 중…'; EV.status.textContent = '';
+    EV.out.innerHTML = '';
+
+    var idxP;
+    if (useCurrent) {
+      if (!index || !index.chunks.length) { EV.runBtn.disabled = false; EV.runBtn.textContent = '평가 실행'; toast('현재 인덱스가 없습니다. 위에서 "인덱스 구축"을 먼저 하세요.', 'warn'); return; }
+      idxP = Promise.resolve(index);
+    } else {
+      idxP = ensureEvalDemoIndex();
+    }
+
+    idxP.then(function (idx) {
+      return L.eval.runRetrievalEval({
+        dataset: dataset, methods: methods, ks: ks,
+        retrieveFn: function (q, m) { return evalRetrieveFn(idx, hasProfile)(q, m); },
+        onProgress: function (p) { EV.status.textContent = p.done + ' / ' + p.total; },
+      });
+    }).then(function (res) {
+      EV.runBtn.disabled = false; EV.runBtn.textContent = '평가 실행';
+      EV.status.textContent = '완료 · ' + res.perQuery.length + '개 (질의×방법)';
+      renderEvalResults(res, useCurrent ? '현재 인덱스' : '데모 코퍼스');
+    }).catch(function (e) {
+      EV.runBtn.disabled = false; EV.runBtn.textContent = '평가 실행';
+      EV.status.textContent = '오류: ' + (e && e.message || e);
+      toast('평가 실패: ' + (e && e.message || e), 'warn');
+    });
+  }
+
+  function fmt(v) { return (typeof v === 'number' && !isNaN(v)) ? v.toFixed(3) : '—'; }
+
+  function renderEvalResults(res, corpusLabel) {
+    EV.out.innerHTML = '';
+    var ks = res.ks;
+    // 지표 컬럼 순서
+    var cols = [];
+    ks.forEach(function (k) { cols.push('ndcg@' + k); });
+    ks.forEach(function (k) { cols.push('recall@' + k); });
+    ks.forEach(function (k) { cols.push('precision@' + k); });
+    cols.push('mrr'); cols.push('map');
+
+    // 각 컬럼 최고값(강조용)
+    var best = {};
+    cols.forEach(function (c) {
+      var mx = -Infinity;
+      res.methods.forEach(function (m) { var v = res.byMethod[m].avg[c]; if (typeof v === 'number' && v > mx) mx = v; });
+      best[c] = mx;
+    });
+
+    // 요약 표 (method × metric)
+    EV.out.appendChild(el('div', { class: 'eval-cap', text: '평균 지표 · ' + corpusLabel + ' · 질의 ' + (res.perQuery.length / res.methods.length) + '개 · 최고값 강조' }));
+    var thead = el('tr', {}, [el('th', { class: 'eval-th-m', text: '방법' })].concat(cols.map(function (c) { return el('th', { text: c }); })));
+    var rows = [thead];
+    res.methods.forEach(function (m) {
+      var avg = res.byMethod[m].avg;
+      var tds = [el('td', { class: 'eval-td-m', text: METHOD_LABELS[m] || m })];
+      cols.forEach(function (c) {
+        var v = avg[c];
+        var isBest = (typeof v === 'number') && best[c] > -Infinity && Math.abs(v - best[c]) < 1e-9 && v > 0;
+        tds.push(el('td', { class: 'mono' + (isBest ? ' eval-best' : ''), text: fmt(v) }));
+      });
+      rows.push(el('tr', {}, tds));
+    });
+    var table = el('table', { class: 'eval-table' }, [el('tbody', {}, rows)]);
+    EV.out.appendChild(el('div', { class: 'scroll-x' }, [table]));
+
+    // 질의별 상세(펼침)
+    var det = el('details', { class: 'eval-details' }, [el('summary', { text: '질의별 상세 (' + (res.perQuery.length / res.methods.length) + '질의 × ' + res.methods.length + '방법)' })]);
+    // 질의 인덱스별 그룹
+    var byQi = {};
+    res.perQuery.forEach(function (r) { (byQi[r.qi] = byQi[r.qi] || []).push(r); });
+    Object.keys(byQi).forEach(function (qi) {
+      var group = byQi[qi];
+      var q = group[0];
+      var relStr = Array.isArray(q.relevant) ? q.relevant.join(', ') : Object.keys(q.relevant).map(function (k) { return k + ':' + q.relevant[k]; }).join(', ');
+      var qbox = el('div', { class: 'eval-qbox' });
+      qbox.appendChild(el('div', { class: 'eval-q' }, [el('span', { class: 'eval-q__i', text: 'Q' + (Number(qi) + 1) }), el('span', { class: 'eval-q__t', text: q.query })]));
+      qbox.appendChild(el('div', { class: 'eval-q__rel mono', text: '정답: ' + relStr }));
+      var qrows = [el('tr', {}, [el('th', { text: '방법' }), el('th', { class: 'eval-th-rank', text: '랭킹 (docId)' })].concat(cols.map(function (c) { return el('th', { text: c }); })))];
+      group.forEach(function (r) {
+        var relSet = {}; (Array.isArray(r.relevant) ? r.relevant : Object.keys(r.relevant).filter(function (k) { return Number(r.relevant[k]) > 0; })).forEach(function (id) { relSet[id] = true; });
+        var rankSpans = r.ranked.slice(0, Math.max.apply(null, ks)).map(function (id) {
+          return el('span', { class: 'eval-rk' + (relSet[id] ? ' eval-rk--hit' : ''), text: id });
+        });
+        var tds = [el('td', { class: 'eval-td-m', text: METHOD_LABELS[r.method] || r.method }), el('td', {}, [el('div', { class: 'eval-rankline' }, rankSpans)])];
+        cols.forEach(function (c) { tds.push(el('td', { class: 'mono', text: fmt(r.metrics[c]) })); });
+        qrows.push(el('tr', {}, tds));
+      });
+      qbox.appendChild(el('div', { class: 'scroll-x' }, [el('table', { class: 'eval-table eval-table--q' }, [el('tbody', {}, qrows)])]));
+      det.appendChild(qbox);
+    });
+    EV.out.appendChild(det);
   }
 
   return {
@@ -3323,6 +3677,7 @@ var EVAL = (function () {
   var lastRun = null;
   var abortCtl = null, running = false;
   var METRICS = ['exact_match', 'contains', 'regex', 'json_valid', 'length'];
+  var subView = 'eval';   // 'eval' | 'sweep'
 
   function newVariant(id) { return { id: id, profileId: '', model: '', system: '', promptTemplate: '', params: { temperature: 0.7, max_tokens: 512, top_p: 1 } }; }
 
@@ -3336,17 +3691,43 @@ var EVAL = (function () {
     inner.appendChild(el('div', { class: 'lab__head' }, [
       el('div', {}, [
         el('div', { class: 'lab__title', text: 'Eval / Bench' }),
-        el('div', { class: 'lab__sub', text: 'A/B 변형 × 데이터셋 케이스 × N회 반복. latency/TTFT/tok·s 분포, 출력 diff, 자동지표, LLM-as-judge(순서 무작위·양방향 평균 편향보정 · 참고치). JSON/CSV export.' }),
+        el('div', { class: 'lab__sub', text: 'A/B 변형 × 케이스 × N회 반복(분포·diff·자동지표·LLM-judge), 여러 샘플링 파라미터 조합을 비교하는 Parameter Sweep(그리드 서치), 그리고 엔드포인트에 부하를 걸어 지연 분포(p50/p95/p99)·처리량(req/s·tok/s)·에러율을 측정하는 Bench(부하/지연 벤치마크)를 제공합니다.' }),
       ]),
       el('div', { class: 'prov-legend' }, [provBadge('browser'), provBadge('server')]),
     ]));
 
-    buildVariantSection(inner);
-    buildCaseSection(inner);
-    buildConfigSection(inner);
+    // 서브탭: A/B Eval | Parameter Sweep | Bench
+    var subbar = el('div', { class: 'vc-tabs sweep-subtabs' });
+    E.evalPane = el('div', {});
+    E.sweepPane = el('div', { hidden: true });
+    E.benchPane = el('div', { hidden: true });
+    E.subBtns = {};
+    [['eval', 'A/B Eval'], ['sweep', 'Parameter Sweep'], ['bench', 'Bench']].forEach(function (o) {
+      var b = el('button', { type: 'button', class: 'vc-tab' + (subView === o[0] ? ' is-active' : ''), text: o[1] });
+      b.addEventListener('click', function () { setSubView(o[0]); });
+      E.subBtns[o[0]] = b; subbar.appendChild(b);
+    });
+    inner.appendChild(subbar);
+    inner.appendChild(E.evalPane);
+    inner.appendChild(E.sweepPane);
+    inner.appendChild(E.benchPane);
 
+    buildVariantSection(E.evalPane);
+    buildCaseSection(E.evalPane);
+    buildConfigSection(E.evalPane);
     E.results = el('div', { id: 'evalResults' });
-    inner.appendChild(E.results);
+    E.evalPane.appendChild(E.results);
+
+    buildSweepSection(E.sweepPane);
+    buildBenchSection(E.benchPane);
+  }
+
+  function setSubView(v) {
+    subView = v;
+    E.evalPane.hidden = v !== 'eval';
+    E.sweepPane.hidden = v !== 'sweep';
+    E.benchPane.hidden = v !== 'bench';
+    Object.keys(E.subBtns).forEach(function (k) { E.subBtns[k].classList.toggle('is-active', k === v); });
   }
 
   /* --- 변형 A/B --- */
@@ -3667,6 +4048,1025 @@ var EVAL = (function () {
     return lines.join('\n');
   }
   function csvCell(v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+
+  /* ============================================================
+     PARAMETER SWEEP — 그리드 서치 서브뷰
+     ============================================================ */
+  var SW = L.sweep;
+  var S = {};                       // sweep element refs
+  var SWEEP_AXES = [
+    { key: 'temperature', ph: '0, 0.5, 1.0' },
+    { key: 'top_p', ph: '0.8, 0.9, 1.0' },
+    { key: 'top_k', ph: '20, 40' },
+    { key: 'max_tokens', ph: '128, 512' },
+    { key: 'frequency_penalty', ph: '0, 0.5' },
+    { key: 'presence_penalty', ph: '0, 0.5' },
+  ];
+  var swAbort = null, swRunning = false, swLastRun = null;
+  var swSortKey = 'combo';
+
+  function buildSweepSection(pane) {
+    // 1 · 프롬프트
+    var p1 = labSection('1 · 프롬프트 & 연결');
+    S.sys = el('textarea', { class: 'field field-mono', rows: 2, placeholder: 'system 프롬프트 (선택)' });
+    S.prompt = el('textarea', { class: 'field field-mono', rows: 3, placeholder: '모든 파라미터 조합에 동일하게 실행할 프롬프트 (user)' });
+    S.prof = el('select', { class: 'field' });
+    S.prof.appendChild(el('option', { value: '', text: '(활성 연결)' }));
+    L.profiles.list().forEach(function (p) { S.prof.appendChild(el('option', { value: p.id, text: p.label })); });
+    S.model = el('input', { type: 'text', class: 'field', placeholder: '모델 override (비우면 활성 모델)' });
+    var sampleBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '샘플 채우기' });
+    sampleBtn.addEventListener('click', function () {
+      S.prompt.value = '창의적인 스타트업 이름 3개를 지어줘. 분야: 친환경 배송.';
+      SWEEP_AXES.forEach(function (a) { S.axis[a.key].on.checked = false; });
+      S.axis.temperature.on.checked = true; S.axis.temperature.vals.value = '0, 0.7, 1.2';
+      S.axis.top_p.on.checked = true; S.axis.top_p.vals.value = '0.9, 1.0';
+      S.repeats.value = '2';
+      updatePreview();
+      toast('샘플: temperature×top_p (3×2) · repeats 2');
+    });
+    p1.appendChild(el('div', { class: 'field-col' }, [el('label', { text: 'system (선택)' }), S.sys]));
+    p1.appendChild(el('div', { class: 'field-col' }, [el('label', { text: 'prompt' }), S.prompt]));
+    p1.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: '연결' }), S.prof, el('label', { text: '모델' }), S.model]));
+    p1.appendChild(el('div', { class: 'lab-btnrow' }, [sampleBtn]));
+    pane.appendChild(p1);
+
+    // 2 · 축 편집기
+    var p2 = labSection('2 · 파라미터 축 (그리드)', el('span', { class: 'field-note', text: '켠 축에 콤마로 값 목록 입력 · 값 문자열은 자동 숫자화' }));
+    S.axis = {};
+    var grid = el('div', { class: 'sweep-axes' });
+    SWEEP_AXES.forEach(function (a) {
+      var on = el('input', { type: 'checkbox' });
+      var vals = el('input', { type: 'text', class: 'field field-mono', placeholder: a.ph });
+      on.addEventListener('change', updatePreview);
+      vals.addEventListener('input', updatePreview);
+      S.axis[a.key] = { on: on, vals: vals };
+      var row = el('div', { class: 'sweep-axis' }, [
+        el('label', { class: 'chk sweep-axis__k' }, [on, el('span', { class: 'mono', text: a.key })]),
+        vals,
+      ]);
+      grid.appendChild(row);
+    });
+    p2.appendChild(grid);
+
+    // baseParams (고정값 — 축으로 안 켠 파라미터에 공통 적용)
+    S.baseTemp = el('input', { type: 'number', class: 'field field-num', step: 0.05, min: 0, max: 2, value: 0.7 });
+    S.baseMax = el('input', { type: 'number', class: 'field field-num', step: 16, min: 1, value: 512 });
+    p2.appendChild(el('div', { class: 'param-mini sweep-base' }, [
+      el('label', { text: '고정값(base) · 축 미사용 시' }),
+      el('label', { class: 'mono', text: 'temperature' }), S.baseTemp,
+      el('label', { class: 'mono', text: 'max_tokens' }), S.baseMax,
+      el('span', { class: 'field-note', text: '해당 파라미터를 축으로 켜면 축 값이 우선합니다.' }),
+    ]));
+    pane.appendChild(p2);
+
+    // 3 · 실행
+    var p3 = labSection('3 · 실행 설정');
+    S.repeats = el('input', { type: 'number', class: 'field field-num', min: 1, max: 20, step: 1, value: 1 });
+    S.repeats.addEventListener('input', updatePreview);
+    S.concurrency = el('input', { type: 'range', class: 'batch-range', min: 1, max: 10, step: 1, value: 3 });
+    S.concLabel = el('span', { class: 'mono field-note', text: '동시성 3' });
+    S.concurrency.addEventListener('input', function () { S.concLabel.textContent = '동시성 ' + S.concurrency.value; });
+
+    // judge (선택)
+    S.judgeOn = el('input', { type: 'checkbox' });
+    S.judgeProf = el('select', { class: 'field' });
+    S.judgeProf.appendChild(el('option', { value: '', text: '심판=활성 연결' }));
+    L.profiles.list().forEach(function (p) { S.judgeProf.appendChild(el('option', { value: p.id, text: p.label })); });
+    var judgeFs = el('div', { class: 'judge-config' }, [
+      el('label', { class: 'chk' }, [S.judgeOn, el('span', { text: 'LLM-as-judge 로 조합 대표출력 채점' })]),
+      el('span', { class: 'lab-flag', text: '참고치' }),
+      el('div', { class: 'param-mini' }, [el('label', { text: '심판 연결' }), S.judgeProf]),
+      el('div', { class: 'field-note', text: '각 조합의 대표(첫 정상) 출력을 루브릭(정확성·유용성)으로 채점합니다. 상대 참고용입니다.' }),
+    ]);
+
+    S.preview = el('div', { class: 'sweep-preview' });
+    S.runBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '▶ Sweep 실행' });
+    S.runBtn.addEventListener('click', runSweep);
+    S.progress = el('div', { class: 'eval-progress', hidden: true }, [el('div', { class: 'eval-progress__bar' })]);
+    S.progressTxt = el('span', { class: 'mono field-note' });
+
+    p3.appendChild(el('div', { class: 'param-mini' }, [
+      el('label', { text: '반복수 N (조합당)' }), S.repeats,
+      el('label', { text: '동시 실행' }), S.concurrency, S.concLabel,
+    ]));
+    p3.appendChild(judgeFs);
+    p3.appendChild(S.preview);
+    p3.appendChild(el('div', { class: 'lab-btnrow' }, [S.runBtn, S.progressTxt]));
+    p3.appendChild(S.progress);
+    pane.appendChild(p3);
+
+    S.results = el('div', { id: 'sweepResults' });
+    pane.appendChild(S.results);
+
+    updatePreview();
+  }
+
+  // 켠 축들을 { key:[values...] } 로 수집 (콤마 분해)
+  function collectAxes() {
+    var axes = {};
+    SWEEP_AXES.forEach(function (a) {
+      var ax = S.axis[a.key];
+      if (!ax.on.checked) return;
+      var vals = ax.vals.value.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s.length; });
+      if (vals.length) axes[a.key] = vals;
+    });
+    return axes;
+  }
+
+  function updatePreview() {
+    var axes = collectAxes();
+    var combos = SW.expandGrid(axes);
+    var n = combos.length;
+    var reps = Math.max(1, parseInt(S.repeats.value, 10) || 1);
+    var m = n * reps;
+    S.preview.innerHTML = '';
+    var enabledKeys = Object.keys(axes);
+    var dims = enabledKeys.length ? enabledKeys.map(function (k) { return k + '(' + axes[k].length + ')'; }).join(' × ') : '축 없음(기본 1조합)';
+    S.preview.appendChild(el('div', { class: 'sweep-preview__line' }, [
+      el('span', { class: 'batch-badge', text: n + ' combos' }),
+      el('span', { class: 'field-note mono', text: '× ' + reps + ' repeats = ' }),
+      el('span', { class: 'sweep-preview__runs mono', text: m + ' runs' }),
+      el('span', { class: 'field-note mono', text: '·  ' + dims }),
+    ]));
+    if (m > 50) {
+      S.preview.appendChild(el('div', { class: 'sweep-warn' }, [
+        el('span', { text: '⚠ ' + m + '회 실행 예정 — 다수의 요청은 시간·토큰·레이트리밋에 유의하세요.' }),
+      ]));
+    }
+    S.runBtn.disabled = false;
+  }
+
+  function runSweep() {
+    if (swRunning) { if (swAbort) swAbort.abort(); return; }
+    var prompt = S.prompt.value.trim();
+    if (!prompt) { toast('프롬프트를 입력하세요.', 'warn'); return; }
+    var p = activeProfile();
+    var pid = S.prof.value || (p && p.id);
+    if (!pid) { toast('활성 연결이 없습니다. 연결을 추가하세요.', 'warn'); return; }
+
+    var axes = collectAxes();
+    var reps = Math.max(1, parseInt(S.repeats.value, 10) || 1);
+    var baseParams = { temperature: num(S.baseTemp.value, 0.7), max_tokens: num(S.baseMax.value, 512) };
+    var judge = { enabled: S.judgeOn.checked, profileId: S.judgeProf.value || pid };
+
+    swRunning = true; S.runBtn.textContent = '■ 중단'; S.runBtn.classList.add('is-running');
+    var ctl = new AbortController(); swAbort = ctl;
+    S.progress.hidden = false; S.progress.querySelector('.eval-progress__bar').style.width = '0%';
+    S.progressTxt.textContent = '0 / …';
+    S.results.innerHTML = '';
+
+    SW.runSweep({
+      prompt: prompt, systemPrompt: S.sys.value,
+      axes: axes, baseParams: baseParams, repeats: reps,
+      profileId: pid, model: S.model.value || '',
+      concurrency: parseInt(S.concurrency.value, 10) || 3,
+      useProxy: state.ui.useProxy, signal: ctl.signal,
+      judge: judge.enabled ? judge : null,
+      onProgress: function (pr) {
+        var pct = pr.total ? Math.round(100 * pr.done / pr.total) : 0;
+        S.progress.querySelector('.eval-progress__bar').style.width = pct + '%';
+        S.progressTxt.textContent = pr.done + ' / ' + pr.total;
+      },
+    }).then(function (res) {
+      swRunning = false; S.runBtn.textContent = '▶ Sweep 실행'; S.runBtn.classList.remove('is-running');
+      S.progress.hidden = true;
+      swLastRun = res;
+      renderSweepResults();
+      toast(ctl.signal.aborted ? '중단됨 · 부분 결과' : ('Sweep 완료 · ' + res.stats.okRuns + '/' + res.stats.totalRuns + ' 성공'), ctl.signal.aborted ? 'warn' : 'ok');
+    }).catch(function (e) {
+      swRunning = false; S.runBtn.textContent = '▶ Sweep 실행'; S.runBtn.classList.remove('is-running'); S.progress.hidden = true;
+      toast('Sweep 오류: ' + (e && e.message || e), 'err');
+    });
+  }
+
+  function paramBadges(combo) {
+    var keys = Object.keys(combo);
+    if (!keys.length) return [el('span', { class: 'sweep-badge sweep-badge--base', text: 'base' })];
+    return keys.map(function (k) { return el('span', { class: 'sweep-badge', text: k + '=' + combo[k] }); });
+  }
+
+  function sortedCombos() {
+    var arr = (swLastRun.combos || []).map(function (c, i) { return { c: c, i: i }; });
+    if (swSortKey === 'len') arr.sort(function (a, b) { return b.c.agg.outLenAvg - a.c.agg.outLenAvg; });
+    else if (swSortKey === 'distinct') arr.sort(function (a, b) { return a.c.agg.distinctRatio - b.c.agg.distinctRatio; });
+    else if (swSortKey === 'toks') arr.sort(function (a, b) { return (b.c.agg.tokPerSecAvg || 0) - (a.c.agg.tokPerSecAvg || 0); });
+    return arr;
+  }
+
+  function renderSweepResults() {
+    S.results.innerHTML = '';
+    if (!swLastRun || !swLastRun.combos.length) return;
+    var st = swLastRun.stats;
+
+    var sec = labSection('결과 (' + st.comboCount + ' 조합 · ' + st.totalRuns + ' 실행)', provBadge('server'));
+    sec.appendChild(el('div', { class: 'batch-stats' }, [
+      statChip('조합', st.comboCount), statChip('실행', st.totalRuns),
+      statChip('성공', st.okRuns, 'ok'), statChip('실패', st.errRuns, st.errRuns ? 'no' : ''),
+      statChip('반복/조합', st.repeats),
+    ]));
+
+    // 정렬 선택
+    var sortSel = el('select', { class: 'field' });
+    [['combo', '조합 순서'], ['len', '출력길이(내림)'], ['distinct', '일관성(오름·낮을수록 결정적)'], ['toks', 'tok/s(내림)']].forEach(function (o) {
+      var op = el('option', { value: o[0], text: o[1] }); if (swSortKey === o[0]) op.selected = true; sortSel.appendChild(op);
+    });
+    sortSel.addEventListener('change', function () { swSortKey = sortSel.value; renderComboList(list); });
+    sec.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: '정렬' }), sortSel]));
+
+    var list = el('div', { class: 'sweep-list' });
+    sec.appendChild(list);
+    S.results.appendChild(sec);
+    renderComboList(list);
+
+    renderSweepJudge();
+    renderSweepExport();
+  }
+
+  function renderComboList(list) {
+    list.innerHTML = '';
+    // judge 점수 매핑
+    var jmap = {};
+    if (swLastRun.judge) (swLastRun.judge.perCombo || []).forEach(function (pc) { jmap[pc.comboIndex] = pc; });
+    sortedCombos().forEach(function (item) {
+      var c = item.c, ci = item.i, ag = c.agg;
+      var card = el('div', { class: 'sweep-combo' });
+      var head = el('div', { class: 'sweep-combo__h' }, [el('div', { class: 'sweep-combo__badges' }, paramBadges(c.combo))]);
+      var metrics = el('div', { class: 'sweep-combo__metrics mono' }, [
+        metricCell('outLen', Math.round(ag.outLenAvg)),
+        metricCell('distinct', ag.distinctRatio.toFixed(2)),
+        metricCell('tok/s', ag.tokPerSecAvg != null ? ag.tokPerSecAvg.toFixed(1) : '—'),
+        metricCell('ok', ag.okCount + '/' + ag.n),
+      ]);
+      if (jmap[ci]) metrics.appendChild(metricCell('judge', jmap[ci].total));
+      head.appendChild(metrics);
+      card.appendChild(head);
+
+      // 대표 출력
+      var rep = repOutput(c);
+      var repText = rep.error ? ('⚠ ' + (rep.error.message || 'error')) : (rep.output || '(빈 출력)');
+      card.appendChild(el('div', { class: 'sweep-combo__out' + (rep.error ? ' is-err' : ''), text: repText.length > 400 ? repText.slice(0, 400) + '…' : repText }));
+
+      // repeats>1 이면 샘플 펼침
+      if (c.runs.length > 1) {
+        var det = el('details', { class: 'sweep-samples' });
+        det.appendChild(el('summary', { class: 'mono field-note', text: c.runs.length + '개 샘플 펼치기' }));
+        c.runs.forEach(function (r, ri) {
+          var t = r.error ? ('⚠ ' + (r.error.message || 'error')) : (r.output || '(빈 출력)');
+          det.appendChild(el('div', { class: 'sweep-sample' + (r.error ? ' is-err' : '') }, [
+            el('span', { class: 'sweep-sample__k mono', text: '#' + (ri + 1) }),
+            el('span', { class: 'sweep-sample__t', text: t.length > 300 ? t.slice(0, 300) + '…' : t }),
+          ]));
+        });
+        card.appendChild(det);
+      }
+      list.appendChild(card);
+    });
+  }
+  function metricCell(k, v) { return el('span', { class: 'sweep-metric' }, [el('i', { text: k }), el('b', { text: String(v) })]); }
+  function statChip(k, v, kind) { return el('div', { class: 'batch-stat' + (kind ? ' batch-stat--' + kind : '') }, [el('i', { text: k }), el('b', { class: 'mono', text: String(v) })]); }
+  function repOutput(c) { for (var i = 0; i < c.runs.length; i++) if (c.runs[i] && !c.runs[i].error) return c.runs[i]; return c.runs[0] || { output: '', error: null }; }
+
+  function renderSweepJudge() {
+    if (!swLastRun.judge) return;
+    var sec = labSection('LLM-as-judge (조합 채점)', el('span', { class: 'lab-flag', text: '참고치' }));
+    var wrap = el('div', { class: 'scroll-x' });
+    var t = el('table', { class: 'data-table data-table--compact' });
+    t.appendChild(el('thead', {}, [el('tr', {}, ['조합', '총점'].map(function (h) { return el('th', { text: h }); }))]));
+    var tb = el('tbody', {});
+    var rows = (swLastRun.judge.perCombo || []).slice().sort(function (a, b) { return b.total - a.total; });
+    rows.forEach(function (pc) {
+      var badges = el('td', {}, paramBadges(pc.params));
+      tb.appendChild(el('tr', {}, [badges, el('td', { class: 'mono', text: String(pc.total) })]));
+    });
+    t.appendChild(tb); wrap.appendChild(t); sec.appendChild(wrap);
+    sec.appendChild(el('div', { class: 'field-note', text: '조합 대표출력을 루브릭 채점한 상대 참고치입니다.' }));
+    S.results.appendChild(sec);
+  }
+
+  function renderSweepExport() {
+    var sec = el('div', { class: 'lab-btnrow' });
+    var jbtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Export JSON' });
+    jbtn.addEventListener('click', function () {
+      downloadFile('sweep_run.json', JSON.stringify({ schemaVersion: '1', type: 'llm-lab-sweep', axes: swLastRun.axes, stats: swLastRun.stats,
+        combos: swLastRun.combos.map(function (c) { return { params: c.params, agg: c.agg, runs: c.runs.map(function (r) { return { output: r.output, ms: r.ms, tokPerSec: r.tokPerSec, error: r.error }; }) }; }),
+        judge: swLastRun.judge || null }, null, 2));
+    });
+    var cbtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Export CSV' });
+    cbtn.addEventListener('click', function () { downloadFile('sweep_run.csv', sweepToCSV(), 'text/csv'); });
+    sec.appendChild(el('span', { class: 'field-note', text: '내보내기: 조합별 파라미터 + 집계지표 + 대표출력' }));
+    sec.appendChild(jbtn); sec.appendChild(cbtn);
+    S.results.appendChild(sec);
+  }
+  function sweepToCSV() {
+    var keys = {}; swLastRun.combos.forEach(function (c) { Object.keys(c.combo).forEach(function (k) { keys[k] = true; }); });
+    var axisCols = Object.keys(keys);
+    var header = axisCols.concat(['outLenAvg', 'distinctRatio', 'tokPerSecAvg', 'okCount', 'n', 'repOutput']);
+    var lines = [header.map(csvCell).join(',')];
+    swLastRun.combos.forEach(function (c) {
+      var rep = repOutput(c);
+      var row = axisCols.map(function (k) { return csvCell(c.combo[k]); });
+      row.push(csvCell(Math.round(c.agg.outLenAvg)));
+      row.push(csvCell(c.agg.distinctRatio.toFixed(3)));
+      row.push(csvCell(c.agg.tokPerSecAvg != null ? c.agg.tokPerSecAvg.toFixed(2) : ''));
+      row.push(csvCell(c.agg.okCount));
+      row.push(csvCell(c.agg.n));
+      row.push(csvCell(rep.error ? ('error:' + (rep.error.message || '')) : (rep.output || '')));
+      lines.push(row.join(','));
+    });
+    return lines.join('\n');
+  }
+
+  /* ======================================================================
+     BENCH — 엔드포인트 부하/지연 벤치마킹 (L.bench 소비)
+     ====================================================================== */
+  var BN = L.bench;
+  var BE = {};                       // bench element refs
+  var bnAbort = null, bnRunning = false, bnLastRun = null, bnLastSweep = null;
+  var bnMode = 'single';             // 'single' | 'sweep'
+
+  function buildBenchSection(pane) {
+    // 주의 배너 — 실제 부하 경고 (상시)
+    pane.appendChild(el('div', { class: 'bench-caution', role: 'note' }, [
+      el('span', { class: 'bench-caution__i', 'aria-hidden': 'true', text: '⚡' }),
+      el('span', { text: '실제 엔드포인트에 부하를 겁니다. 요청 수·동시성을 실서버 용량에 맞춰 신중히 설정하세요. (요청·토큰·레이트리밋 소모)' }),
+    ]));
+
+    // 1 · 프롬프트 & 연결
+    var p1 = labSection('1 · 프롬프트 & 연결');
+    BE.prompt = el('textarea', { class: 'field field-mono', rows: 2, placeholder: '모든 요청에 동일하게 보낼 고정 프롬프트' });
+    BE.prompt.value = 'Reply with a single short sentence about the number 42.';
+    BE.prof = el('select', { class: 'field' });
+    BE.prof.appendChild(el('option', { value: '', text: '(활성 연결)' }));
+    L.profiles.list().forEach(function (p) { BE.prof.appendChild(el('option', { value: p.id, text: p.label })); });
+    BE.model = el('input', { type: 'text', class: 'field', placeholder: '모델 override (비우면 활성 모델)' });
+    p1.appendChild(el('div', { class: 'field-col' }, [el('label', { text: '고정 프롬프트' }), BE.prompt]));
+    p1.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: '연결' }), BE.prof, el('label', { text: '모델' }), BE.model]));
+    pane.appendChild(p1);
+
+    // 2 · 부하 설정
+    var p2 = labSection('2 · 부하 설정');
+    // 모드 토글
+    BE.modeSingle = el('button', { type: 'button', class: 'seg-btn is-active', text: '단일 동시성' });
+    BE.modeSweep = el('button', { type: 'button', class: 'seg-btn', text: '동시성 스윕' });
+    BE.modeSingle.addEventListener('click', function () { setBenchMode('single'); });
+    BE.modeSweep.addEventListener('click', function () { setBenchMode('sweep'); });
+    p2.appendChild(el('div', { class: 'seg' }, [BE.modeSingle, BE.modeSweep]));
+
+    BE.requests = el('input', { type: 'number', class: 'field field-num', min: 1, max: 2000, step: 1, value: 20 });
+    BE.requests.addEventListener('input', updateBenchPreview);
+    BE.concurrency = el('input', { type: 'number', class: 'field field-num', min: 1, max: 64, step: 1, value: 4 });
+    BE.concurrency.addEventListener('input', updateBenchPreview);
+    BE.levels = el('input', { type: 'text', class: 'field field-mono', value: '1, 2, 4, 8', placeholder: '예: 1, 2, 4, 8' });
+    BE.levels.addEventListener('input', updateBenchPreview);
+    BE.warmup = el('input', { type: 'number', class: 'field field-num', min: 0, max: 100, step: 1, value: 2 });
+    BE.maxTokens = el('input', { type: 'number', class: 'field field-num', min: 1, max: 4096, step: 16, value: 64 });
+
+    BE.singleRow = el('div', { class: 'param-mini' }, [
+      el('label', { text: '요청 수' }), BE.requests,
+      el('label', { text: '동시성' }), BE.concurrency,
+    ]);
+    BE.sweepRow = el('div', { class: 'param-mini', hidden: true }, [
+      el('label', { text: '레벨당 요청 수' }), BE.requests2Holder(),
+      el('label', { text: '동시성 레벨' }), BE.levels,
+    ]);
+    p2.appendChild(BE.singleRow);
+    p2.appendChild(BE.sweepRow);
+    p2.appendChild(el('div', { class: 'param-mini' }, [
+      el('label', { text: 'warmup (제외)' }), BE.warmup,
+      el('label', { text: 'max_tokens' }), BE.maxTokens,
+      el('span', { class: 'field-note', text: 'warmup 요청은 통계·처리량에서 제외됩니다.' }),
+    ]));
+    pane.appendChild(p2);
+
+    // 3 · 실행
+    var p3 = labSection('3 · 실행');
+    BE.preview = el('div', { class: 'sweep-preview' });
+    BE.runBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '▶ 벤치 실행' });
+    BE.runBtn.addEventListener('click', runBench);
+    BE.progress = el('div', { class: 'eval-progress', hidden: true }, [el('div', { class: 'eval-progress__bar' })]);
+    BE.progressTxt = el('span', { class: 'mono field-note' });
+    p3.appendChild(BE.preview);
+    p3.appendChild(el('div', { class: 'lab-btnrow' }, [BE.runBtn, BE.progressTxt]));
+    p3.appendChild(BE.progress);
+    pane.appendChild(p3);
+
+    BE.results = el('div', { id: 'benchResults' });
+    pane.appendChild(BE.results);
+
+    updateBenchPreview();
+  }
+
+  // 스윕 모드에서 '요청 수' 입력(BE.requests)을 재사용하기 위한 placeholder 노드.
+  // 같은 input 을 두 행에 넣을 수 없으므로 스윕용 별도 input 을 만들어 값 동기화.
+  BE.requests2Holder = function () {
+    BE.requestsSweep = el('input', { type: 'number', class: 'field field-num', min: 1, max: 2000, step: 1, value: 20 });
+    BE.requestsSweep.addEventListener('input', updateBenchPreview);
+    return BE.requestsSweep;
+  };
+
+  function setBenchMode(m) {
+    bnMode = m;
+    BE.modeSingle.classList.toggle('is-active', m === 'single');
+    BE.modeSweep.classList.toggle('is-active', m === 'sweep');
+    BE.singleRow.hidden = m !== 'single';
+    BE.sweepRow.hidden = m !== 'sweep';
+    updateBenchPreview();
+  }
+
+  function parseLevels() {
+    return BE.levels.value.split(',').map(function (s) { return parseInt(s.trim(), 10); })
+      .filter(function (n) { return !isNaN(n) && n >= 1; }).map(function (n) { return Math.min(64, n); });
+  }
+
+  function updateBenchPreview() {
+    BE.preview.innerHTML = '';
+    var reqs, plannedReqs, dims;
+    if (bnMode === 'sweep') {
+      var levels = parseLevels();
+      reqs = Math.max(1, parseInt(BE.requestsSweep.value, 10) || 20);
+      var warm = Math.max(0, parseInt(BE.warmup.value, 10) || 0);
+      plannedReqs = levels.length * (reqs + warm);
+      dims = levels.length + '개 레벨(' + (levels.join('/') || '—') + ') × ' + reqs + '요청';
+      BE.preview.appendChild(el('div', { class: 'sweep-preview__line' }, [
+        el('span', { class: 'batch-badge', text: levels.length + ' levels' }),
+        el('span', { class: 'field-note mono', text: '· 레벨당 ' + reqs + ' + warmup ' + warm + ' = ' }),
+        el('span', { class: 'sweep-preview__runs mono', text: plannedReqs + ' 총요청' }),
+        el('span', { class: 'field-note mono', text: '· ' + dims }),
+      ]));
+    } else {
+      reqs = Math.max(1, parseInt(BE.requests.value, 10) || 20);
+      var conc = Math.max(1, parseInt(BE.concurrency.value, 10) || 1);
+      var warm2 = Math.max(0, parseInt(BE.warmup.value, 10) || 0);
+      plannedReqs = reqs + warm2;
+      BE.preview.appendChild(el('div', { class: 'sweep-preview__line' }, [
+        el('span', { class: 'batch-badge', text: reqs + ' requests' }),
+        el('span', { class: 'field-note mono', text: '· 동시성 ' + conc + ' + warmup ' + warm2 + ' = ' }),
+        el('span', { class: 'sweep-preview__runs mono', text: plannedReqs + ' 총요청' }),
+      ]));
+    }
+    if (plannedReqs > 200) {
+      BE.preview.appendChild(el('div', { class: 'sweep-warn' }, [
+        el('span', { text: '⚠ 총 ' + plannedReqs + '회 실제 요청 예정 — 대량 부하입니다. 실서버 용량·레이트리밋·비용에 특히 유의하세요.' }),
+      ]));
+    }
+  }
+
+  function benchProfileId() {
+    var p = activeProfile();
+    return BE.prof.value || (p && p.id);
+  }
+
+  function runBench() {
+    if (bnRunning) { if (bnAbort) bnAbort.abort(); return; }
+    var prompt = BE.prompt.value.trim();
+    if (!prompt) { toast('고정 프롬프트를 입력하세요.', 'warn'); return; }
+    var pid = benchProfileId();
+    if (!pid) { toast('활성 연결이 없습니다. 연결을 추가하세요.', 'warn'); return; }
+
+    var warm = Math.max(0, parseInt(BE.warmup.value, 10) || 0);
+    var maxTok = Math.max(1, parseInt(BE.maxTokens.value, 10) || 64);
+    var common = {
+      prompt: prompt, profileId: pid, model: BE.model.value || '',
+      warmup: warm, maxTokens: maxTok, useProxy: state.ui.useProxy,
+    };
+
+    bnRunning = true; BE.runBtn.textContent = '■ 중단'; BE.runBtn.classList.add('is-running');
+    var ctl = new AbortController(); bnAbort = ctl;
+    BE.progress.hidden = false; BE.progress.querySelector('.eval-progress__bar').style.width = '0%';
+    BE.progressTxt.textContent = '0 / …';
+    BE.results.innerHTML = '';
+
+    var onProgress = function (pr) {
+      var pct = pr.total ? Math.round(100 * pr.done / pr.total) : 0;
+      BE.progress.querySelector('.eval-progress__bar').style.width = pct + '%';
+      var ph = pr.phase === 'warmup' ? '워밍업' : '측정';
+      var lvl = pr.level != null ? ('동시성 ' + pr.level + ' · ') : '';
+      BE.progressTxt.textContent = lvl + ph + ' ' + pr.done + ' / ' + pr.total;
+    };
+
+    var promise;
+    if (bnMode === 'sweep') {
+      var levels = parseLevels();
+      if (!levels.length) { toast('동시성 레벨을 입력하세요 (예: 1, 2, 4, 8).', 'warn'); bnDoneUI(); return; }
+      var reqs = Math.max(1, parseInt(BE.requestsSweep.value, 10) || 20);
+      promise = BN.runConcurrencySweep(Object.assign({}, common, {
+        requests: reqs, concurrencyLevels: levels, signal: ctl.signal, onProgress: onProgress,
+      })).then(function (res) {
+        bnLastSweep = res; bnLastRun = null; renderBenchSweep(res);
+        toast(ctl.signal.aborted ? '중단됨 · 부분 결과' : ('스윕 완료 · ' + res.levels.length + '개 레벨'), ctl.signal.aborted ? 'warn' : 'ok');
+      });
+    } else {
+      var reqs2 = Math.max(1, parseInt(BE.requests.value, 10) || 20);
+      var conc = Math.max(1, parseInt(BE.concurrency.value, 10) || 1);
+      promise = BN.runBenchmark(Object.assign({}, common, {
+        requests: reqs2, concurrency: conc, signal: ctl.signal, onProgress: onProgress,
+      })).then(function (res) {
+        bnLastRun = res; bnLastSweep = null; renderBenchSingle(res);
+        toast(ctl.signal.aborted ? '중단됨 · 부분 결과' : ('벤치 완료 · ' + res.okCount + '/' + res.perRequest.length + ' 성공'), ctl.signal.aborted ? 'warn' : 'ok');
+      });
+    }
+    promise.catch(function (e) { toast('벤치 오류: ' + (e && e.message || e), 'err'); }).then(bnDoneUI);
+  }
+
+  function bnDoneUI() {
+    bnRunning = false; BE.runBtn.textContent = '▶ 벤치 실행'; BE.runBtn.classList.remove('is-running'); BE.progress.hidden = true;
+  }
+
+  function fmtMs(v) { return v == null ? '—' : (Math.round(v) + ' ms'); }
+  function fmtNum(v, d) { return v == null ? '—' : (Number(v).toFixed(d == null ? 2 : d)); }
+  function fmtPct(v) { return v == null ? '—' : (Math.round(v * 1000) / 10) + '%'; }
+
+  // 단일 벤치 결과 렌더 — 통계 칩 + percentile 표 + 히스토그램
+  function renderBenchSingle(res) {
+    BE.results.innerHTML = '';
+    var errKind = res.errorRate > 0 ? (res.errorRate >= 0.5 ? 'no' : 'warn') : 'ok';
+    var sec = labSection('결과 · 단일 동시성 ' + res.concurrency, provBadge('server'));
+    sec.appendChild(el('div', { class: 'batch-stats' }, [
+      statChip('요청', res.perRequest.length),
+      statChip('동시성', res.concurrency),
+      statChip('성공', res.okCount, 'ok'),
+      statChip('실패', res.failCount, res.failCount ? 'no' : ''),
+      statChip('에러율', fmtPct(res.errorRate), errKind),
+      statChip('벽시계', fmtMs(res.wallMs)),
+    ]));
+    sec.appendChild(el('div', { class: 'batch-stats' }, [
+      statChip('req/s', fmtNum(res.throughput.reqPerSec, 2), 'ok'),
+      statChip('tok/s', fmtNum(res.throughput.tokPerSec, 1), 'ok'),
+      statChip('총 토큰', res.throughput.totalTokens),
+      statChip('warmup', res.warmup),
+      statChip('peak 동시성', res.peakConcurrency),
+    ]));
+
+    // percentile 표
+    sec.appendChild(el('div', { class: 'bench-tbl-h field-note', text: '지연 분포 (성공 요청 기준)' }));
+    sec.appendChild(benchPercentileTable(res.ttft, res.total));
+
+    // 히스토그램 (총지연 / TTFT)
+    var totVals = res.perRequest.filter(function (r) { return r.ok && typeof r.totalMs === 'number'; }).map(function (r) { return r.totalMs; });
+    var ttftVals = res.perRequest.filter(function (r) { return r.ok && typeof r.ttftMs === 'number'; }).map(function (r) { return r.ttftMs; });
+    if (totVals.length) {
+      sec.appendChild(el('div', { class: 'bench-tbl-h field-note', text: '총지연 분포 히스토그램 (ms)' }));
+      sec.appendChild(benchHistogramSVG(totVals, '--viz-1'));
+    }
+    if (ttftVals.length) {
+      sec.appendChild(el('div', { class: 'bench-tbl-h field-note', text: 'TTFT 분포 히스토그램 (ms)' }));
+      sec.appendChild(benchHistogramSVG(ttftVals, '--viz-3'));
+    }
+
+    BE.results.appendChild(sec);
+    renderBenchExport(false);
+  }
+
+  function benchPercentileTable(ttft, total) {
+    var wrap = el('div', { class: 'scroll-x' });
+    var t = el('table', { class: 'data-table data-table--compact bench-ptable' });
+    t.appendChild(el('thead', {}, [el('tr', {}, [
+      th('지표'), th('n'), th('min'), th('p50'), th('p95'), th('p99'), th('max'), th('mean'),
+    ])]));
+    var tb = el('tbody', {});
+    function row(label, s) {
+      return el('tr', {}, [
+        el('td', { class: 'mono', text: label }),
+        td(s.count, true), td(fmtMs(s.min), true), td(fmtMs(s.p50), true),
+        td(fmtMs(s.p95), true), td(fmtMs(s.p99), true), td(fmtMs(s.max), true),
+        td(s.mean == null ? '—' : (Math.round(s.mean) + ' ms'), true),
+      ]);
+    }
+    tb.appendChild(row('TTFT', ttft));
+    tb.appendChild(row('총지연', total));
+    t.appendChild(tb); wrap.appendChild(t);
+    return wrap;
+  }
+
+  // 결정적 SVG 히스토그램 — L.bench.histogram 사용
+  function benchHistogramSVG(values, colorVar) {
+    var h = BN.histogram(values, 12);
+    var W = 640, H = 150, padL = 40, padB = 24, padT = 10, padR = 10;
+    var plotW = W - padL - padR, plotH = H - padB - padT;
+    var bins = h.bins, maxC = h.max || 1;
+    var bw = bins.length ? plotW / bins.length : plotW;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'bench-hist', width: '100%', preserveAspectRatio: 'xMidYMid meet', role: 'img' });
+    // 축선
+    svg.appendChild(svgEl('line', { x1: padL, y1: padT, x2: padL, y2: padT + plotH, stroke: 'var(--color-border-strong)', 'stroke-width': '1' }));
+    svg.appendChild(svgEl('line', { x1: padL, y1: padT + plotH, x2: padL + plotW, y2: padT + plotH, stroke: 'var(--color-border-strong)', 'stroke-width': '1' }));
+    // y max 라벨
+    svg.appendChild(svgText(padL - 6, padT + 8, String(maxC), { anchor: 'end', size: 10 }));
+    svg.appendChild(svgText(padL - 6, padT + plotH, '0', { anchor: 'end', size: 10 }));
+    bins.forEach(function (b, i) {
+      var bh = maxC ? (b.count / maxC) * plotH : 0;
+      var x = padL + i * bw;
+      var y = padT + plotH - bh;
+      svg.appendChild(svgEl('rect', {
+        x: (x + 1).toFixed(1), y: y.toFixed(1), width: Math.max(1, bw - 2).toFixed(1), height: Math.max(0, bh).toFixed(1),
+        fill: 'var(' + colorVar + ')', rx: '2', opacity: '0.85',
+      }));
+      if (b.count > 0) svg.appendChild(svgText(x + bw / 2, y - 3, String(b.count), { anchor: 'middle', size: 9, fill: 'var(--color-text-muted)' }));
+    });
+    // x축 라벨(첫/끝 구간 경계)
+    if (bins.length) {
+      svg.appendChild(svgText(padL, padT + plotH + 14, Math.round(bins[0].lo) + '', { anchor: 'start', size: 9, fill: 'var(--color-text-muted)' }));
+      svg.appendChild(svgText(padL + plotW, padT + plotH + 14, Math.round(bins[bins.length - 1].hi) + '', { anchor: 'end', size: 9, fill: 'var(--color-text-muted)' }));
+    }
+    var box = el('div', { class: 'bench-viz scroll-x' });
+    box.appendChild(svg);
+    return box;
+  }
+
+  // 동시성 스윕 결과 렌더 — 레벨 표 + 처리량 vs 동시성 곡선 + p95 곡선
+  function renderBenchSweep(res) {
+    BE.results.innerHTML = '';
+    var sec = labSection('결과 · 동시성 스윕 (' + res.levels.length + '개 레벨)', provBadge('server'));
+
+    // 레벨 표
+    var wrap = el('div', { class: 'scroll-x' });
+    var t = el('table', { class: 'data-table data-table--compact bench-ptable' });
+    t.appendChild(el('thead', {}, [el('tr', {}, [
+      th('동시성'), th('req/s'), th('tok/s'), th('TTFT p50'), th('TTFT p95'), th('총 p50'), th('총 p95'), th('에러율'), th('성공/실패'),
+    ])]));
+    var tb = el('tbody', {});
+    res.levels.forEach(function (lv) {
+      tb.appendChild(el('tr', {}, [
+        td(lv.concurrency, true),
+        el('td', { class: 'mono bench-hl', text: fmtNum(lv.reqPerSec, 2) }),
+        td(fmtNum(lv.tokPerSec, 1), true),
+        td(fmtMs(lv.ttftP50), true), td(fmtMs(lv.ttftP95), true),
+        td(fmtMs(lv.totalP50), true), td(fmtMs(lv.totalP95), true),
+        el('td', { class: 'mono', text: fmtPct(lv.errorRate) }),
+        td(lv.okCount + ' / ' + lv.failCount, true),
+      ]));
+    });
+    t.appendChild(tb); wrap.appendChild(t);
+    sec.appendChild(el('div', { class: 'bench-tbl-h field-note', text: '레벨별 요약' }));
+    sec.appendChild(wrap);
+
+    // 곡선: 처리량 vs 동시성
+    sec.appendChild(el('div', { class: 'bench-tbl-h field-note', text: '처리량(req/s) vs 동시성' }));
+    sec.appendChild(benchLineChart(res.levels, function (lv) { return lv.reqPerSec; }, '--viz-2', 'req/s'));
+    // 곡선: p95 지연 vs 동시성
+    sec.appendChild(el('div', { class: 'bench-tbl-h field-note', text: '총지연 p95(ms) vs 동시성' }));
+    sec.appendChild(benchLineChart(res.levels, function (lv) { return lv.totalP95; }, '--viz-1', 'ms'));
+
+    BE.results.appendChild(sec);
+    renderBenchExport(true);
+  }
+
+  // 결정적 SVG 라인차트 — x=동시성(레벨 인덱스 균등), y=accessor
+  function benchLineChart(levels, accessor, colorVar, unit) {
+    var W = 640, H = 170, padL = 48, padB = 28, padT = 12, padR = 14;
+    var plotW = W - padL - padR, plotH = H - padB - padT;
+    var vals = levels.map(accessor).map(function (v) { return typeof v === 'number' && !isNaN(v) ? v : 0; });
+    var maxV = Math.max.apply(null, vals.concat([0]));
+    if (maxV <= 0) maxV = 1;
+    var n = levels.length;
+    var stepX = n > 1 ? plotW / (n - 1) : 0;
+    function px(i) { return padL + (n > 1 ? i * stepX : plotW / 2); }
+    function py(v) { return padT + plotH - (v / maxV) * plotH; }
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'bench-line', width: '100%', preserveAspectRatio: 'xMidYMid meet', role: 'img' });
+    // 축
+    svg.appendChild(svgEl('line', { x1: padL, y1: padT, x2: padL, y2: padT + plotH, stroke: 'var(--color-border-strong)', 'stroke-width': '1' }));
+    svg.appendChild(svgEl('line', { x1: padL, y1: padT + plotH, x2: padL + plotW, y2: padT + plotH, stroke: 'var(--color-border-strong)', 'stroke-width': '1' }));
+    svg.appendChild(svgText(padL - 6, padT + 8, fmtNum(maxV, maxV < 10 ? 1 : 0) + '', { anchor: 'end', size: 10, fill: 'var(--color-text-muted)' }));
+    svg.appendChild(svgText(padL - 6, padT + plotH, '0', { anchor: 'end', size: 10, fill: 'var(--color-text-muted)' }));
+    svg.appendChild(svgText(padL - 30, padT + plotH / 2, unit, { anchor: 'middle', size: 9, fill: 'var(--color-text-faint)' }));
+    // 폴리라인
+    var pts = vals.map(function (v, i) { return px(i).toFixed(1) + ',' + py(v).toFixed(1); }).join(' ');
+    if (n > 1) svg.appendChild(svgEl('polyline', { points: pts, fill: 'none', stroke: 'var(' + colorVar + ')', 'stroke-width': '2', 'stroke-linejoin': 'round' }));
+    // 점 + 값 + x라벨
+    vals.forEach(function (v, i) {
+      svg.appendChild(svgEl('circle', { cx: px(i).toFixed(1), cy: py(v).toFixed(1), r: '3.5', fill: 'var(' + colorVar + ')' }));
+      svg.appendChild(svgText(px(i), py(v) - 7, fmtNum(v, v < 10 ? 2 : 0), { anchor: 'middle', size: 9, fill: 'var(--color-text)' }));
+      svg.appendChild(svgText(px(i), padT + plotH + 15, 'c' + levels[i].concurrency, { anchor: 'middle', size: 10, fill: 'var(--color-text-muted)' }));
+    });
+    var box = el('div', { class: 'bench-viz scroll-x' });
+    box.appendChild(svg);
+    return box;
+  }
+
+  function renderBenchExport(isSweep) {
+    var sec = el('div', { class: 'lab-btnrow' });
+    var jbtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Export JSON' });
+    jbtn.addEventListener('click', function () {
+      if (isSweep && bnLastSweep) {
+        downloadFile('bench_sweep.json', JSON.stringify({
+          schemaVersion: '1', type: 'llm-lab-bench-sweep', concurrencyLevels: bnLastSweep.concurrencyLevels,
+          levels: bnLastSweep.levels.map(function (lv) {
+            return { concurrency: lv.concurrency, reqPerSec: lv.reqPerSec, tokPerSec: lv.tokPerSec, ttftP50: lv.ttftP50, ttftP95: lv.ttftP95, totalP50: lv.totalP50, totalP95: lv.totalP95, errorRate: lv.errorRate, okCount: lv.okCount, failCount: lv.failCount, wallMs: lv.wallMs };
+          }),
+        }, null, 2));
+      } else if (bnLastRun) {
+        var r = bnLastRun;
+        downloadFile('bench_run.json', JSON.stringify({
+          schemaVersion: '1', type: 'llm-lab-bench', concurrency: r.concurrency, requests: r.requests, warmup: r.warmup,
+          wallMs: r.wallMs, throughput: r.throughput, errorRate: r.errorRate, ttft: r.ttft, total: r.total,
+          perRequest: r.perRequest,
+        }, null, 2));
+      }
+    });
+    var cbtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Export CSV' });
+    cbtn.addEventListener('click', function () {
+      if (isSweep && bnLastSweep) downloadFile('bench_sweep.csv', benchSweepCSV(), 'text/csv');
+      else if (bnLastRun) downloadFile('bench_run.csv', benchRunCSV(), 'text/csv');
+    });
+    sec.appendChild(el('span', { class: 'field-note', text: '내보내기: 요청별 계측 + 요약 지표' }));
+    sec.appendChild(jbtn); sec.appendChild(cbtn);
+    BE.results.appendChild(sec);
+  }
+
+  function benchRunCSV() {
+    var header = ['index', 'ok', 'ttftMs', 'totalMs', 'completionTokens', 'error'];
+    var lines = [header.join(',')];
+    bnLastRun.perRequest.forEach(function (r, i) {
+      lines.push([i, r.ok ? 'ok' : 'error', csvCell(r.ttftMs == null ? '' : r.ttftMs), csvCell(r.totalMs), csvCell(r.completionTokens), csvCell(r.error ? (r.error.message || '') : '')].join(','));
+    });
+    return lines.join('\n');
+  }
+  function benchSweepCSV() {
+    var header = ['concurrency', 'reqPerSec', 'tokPerSec', 'ttftP50', 'ttftP95', 'totalP50', 'totalP95', 'errorRate', 'okCount', 'failCount', 'wallMs'];
+    var lines = [header.join(',')];
+    bnLastSweep.levels.forEach(function (lv) {
+      lines.push([lv.concurrency, fmtNum(lv.reqPerSec, 3), fmtNum(lv.tokPerSec, 2), csvCell(lv.ttftP50), csvCell(lv.ttftP95), csvCell(lv.totalP50), csvCell(lv.totalP95), fmtNum(lv.errorRate, 4), lv.okCount, lv.failCount, lv.wallMs].join(','));
+    });
+    return lines.join('\n');
+  }
+
+  // SVG 헬퍼(네임스페이스)
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    return e;
+  }
+  function svgText(x, y, str, o) {
+    o = o || {};
+    var t = svgEl('text', { x: Number(x).toFixed(1), y: Number(y).toFixed(1), 'text-anchor': o.anchor || 'start', 'font-size': (o.size || 10), fill: o.fill || 'var(--color-text)', 'font-family': 'var(--font-mono, monospace)' });
+    t.textContent = str;
+    return t;
+  }
+
+  return { build: build, onShow: function () {} };
+})();
+
+/* ============================================================
+   26b. BATCH RUNNER 모듈 — 데이터셋 배치 실행
+   ============================================================ */
+var BATCH = (function () {
+  var BT = L.batch;
+  var E = {};
+  var dataset = { rows: [], columns: [], format: 'empty' };
+  var lastRun = null;
+  var abortCtl = null, running = false;
+
+  var DEMO_CSV = 'input,expected\n"대한민국의 수도는?",서울\n"2 더하기 2는?",4\n"물의 화학식은?",H2O\n"HTTP 404의 의미를 한 문장으로.",\n"파이썬에서 리스트를 뒤집는 함수는?",reverse';
+  var DEMO_JSONL = '{"topic":"광합성","level":"초등학생"}\n{"topic":"양자역학","level":"대학생"}\n{"topic":"블록체인","level":"일반인"}';
+
+  function build(panel) {
+    panel.dataset.built = '1';
+    var scroll = el('div', { class: 'lab__scroll' });
+    var inner = el('div', { class: 'lab__inner' });
+    scroll.appendChild(inner);
+    panel.appendChild(el('div', { class: 'lab' }, [scroll]));
+
+    inner.appendChild(el('div', { class: 'lab__head' }, [
+      el('div', {}, [
+        el('div', { class: 'lab__title', text: 'Batch Runner' }),
+        el('div', { class: 'lab__sub', text: '프롬프트(또는 체인)를 데이터셋의 각 행에 일괄 실행합니다. CSV/JSONL 자동 감지, {{컬럼}} 템플릿 보간, 동시성 제한, 진행률·중단, 행별 에러 격리. 결과는 CSV/JSONL로 내보냅니다.' }),
+      ]),
+      el('div', { class: 'prov-legend' }, [provBadge('server'), provBadge('browser')]),
+    ]));
+
+    buildDatasetSection(inner);
+    buildTemplateSection(inner);
+    buildRunSection(inner);
+
+    E.results = el('div', { id: 'batchResults' });
+    inner.appendChild(E.results);
+  }
+
+  /* --- 1. 데이터셋 --- */
+  function buildDatasetSection(inner) {
+    var sec = labSection('1 · 데이터셋 (CSV / JSONL 자동 감지)');
+    E.dataText = el('textarea', { class: 'field field-mono', rows: 6, placeholder: 'CSV(헤더행 포함) 또는 JSONL(줄별 JSON)을 붙여넣으세요…\n예) name,question\\n또는 {"input":"...","lang":"en"}' });
+    E.dataText.addEventListener('input', function () { scheduleParse(); });
+
+    var parseBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '파싱' });
+    parseBtn.addEventListener('click', doParse);
+    var demoCsvBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '데모 CSV' });
+    demoCsvBtn.addEventListener('click', function () { E.dataText.value = DEMO_CSV; doParse(); });
+    var demoJsonlBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '데모 JSONL' });
+    demoJsonlBtn.addEventListener('click', function () { E.dataText.value = DEMO_JSONL; doParse(); });
+    var fileLbl = el('label', { class: 'btn btn-ghost btn-sm', for: 'batchFile', text: '파일(.csv/.jsonl)' });
+    var fileInp = el('input', { type: 'file', id: 'batchFile', accept: '.csv,.jsonl,.json,.txt', hidden: true });
+    fileInp.addEventListener('change', function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { E.dataText.value = String(r.result || ''); doParse(); toast('로드: ' + f.name); };
+      r.readAsText(f); e.target.value = '';
+    });
+
+    E.preview = el('div', { class: 'batch-preview' });
+    sec.appendChild(el('div', { class: 'field-col' }, [E.dataText]));
+    sec.appendChild(el('div', { class: 'lab-btnrow' }, [parseBtn, demoCsvBtn, demoJsonlBtn, fileLbl, fileInp]));
+    sec.appendChild(E.preview);
+    inner.appendChild(sec);
+    renderPreview();
+  }
+  var _parseTimer = null;
+  function scheduleParse() { if (_parseTimer) clearTimeout(_parseTimer); _parseTimer = setTimeout(doParse, 350); }
+  function doParse() {
+    if (_parseTimer) { clearTimeout(_parseTimer); _parseTimer = null; }
+    var txt = E.dataText.value;
+    if (!txt.trim()) { dataset = { rows: [], columns: [], format: 'empty' }; renderPreview(); return; }
+    dataset = BT.parseDataset(txt);
+    renderPreview();
+  }
+  function renderPreview() {
+    E.preview.innerHTML = '';
+    if (!dataset.rows.length) {
+      E.preview.appendChild(el('div', { class: 'field-note', text: dataset.format === 'empty' ? '데이터셋 없음 — 붙여넣거나 데모를 불러오세요.' : '파싱된 행이 없습니다.' }));
+      return;
+    }
+    var fmtBadge = el('span', { class: 'batch-badge', text: dataset.format.toUpperCase() });
+    E.preview.appendChild(el('div', { class: 'batch-preview__meta' }, [
+      fmtBadge,
+      el('span', { class: 'field-note mono', text: dataset.rows.length + '행 · ' + dataset.columns.length + '컬럼' }),
+      el('span', { class: 'field-note mono', text: '컬럼: ' + dataset.columns.map(function (c) { return '{{' + c + '}}'; }).join(' ') }),
+    ]));
+    var wrap = el('div', { class: 'scroll-x' });
+    var t = el('table', { class: 'data-table data-table--compact' });
+    t.appendChild(el('thead', {}, [el('tr', {}, [thc('#')].concat(dataset.columns.map(thc)))]));
+    var tb = el('tbody', {});
+    dataset.rows.slice(0, 5).forEach(function (row, i) {
+      var tds = [tdc(String(i + 1), true)].concat(dataset.columns.map(function (c) { return tdc(row[c]); }));
+      tb.appendChild(el('tr', {}, tds));
+    });
+    t.appendChild(tb); wrap.appendChild(t); E.preview.appendChild(wrap);
+    if (dataset.rows.length > 5) E.preview.appendChild(el('div', { class: 'field-note', text: '… 상위 5행 미리보기 (전체 ' + dataset.rows.length + '행)' }));
+  }
+  function thc(x) { return el('th', { text: x == null ? '' : String(x) }); }
+  function tdc(x, mono) { var s = x == null ? '' : (typeof x === 'object' ? JSON.stringify(x) : String(x)); return el('td', { class: 'cell-clip' + (mono ? ' mono' : ''), title: s, text: s.length > 60 ? s.slice(0, 60) + '…' : s }); }
+
+  /* --- 2. 템플릿 · 모드 --- */
+  function buildTemplateSection(inner) {
+    var sec = labSection('2 · 프롬프트 템플릿 · 모드');
+    E.template = el('textarea', { class: 'field field-mono', rows: 3, placeholder: '{{컬럼}} 로 행 값을 삽입합니다. 예) 다음 질문에 답하세요: {{input}}' });
+    E.template.value = '{{input}}';
+    E.system = el('textarea', { class: 'field field-mono', rows: 2, placeholder: 'system 프롬프트 (선택)' });
+
+    E.mode = el('select', { class: 'field' });
+    [['prompt', '단일 프롬프트'], ['chain', '체인 (Chain)']].forEach(function (o) { E.mode.appendChild(el('option', { value: o[0], text: o[1] })); });
+    E.mode.addEventListener('change', function () { E.chainWrap.hidden = E.mode.value !== 'chain'; if (E.mode.value === 'chain') refreshChains(); });
+
+    E.prof = el('select', { class: 'field' });
+    E.prof.appendChild(el('option', { value: '', text: '(활성 연결)' }));
+    L.profiles.list().forEach(function (p) { E.prof.appendChild(el('option', { value: p.id, text: p.label })); });
+    E.model = el('input', { type: 'text', class: 'field', placeholder: '모델 override (비우면 활성 모델)' });
+    E.temp = el('input', { type: 'number', class: 'field field-num', step: 0.05, min: 0, max: 2, value: 0.7 });
+    E.maxt = el('input', { type: 'number', class: 'field field-num', step: 16, min: 1, value: 512 });
+
+    // 체인 선택 (저장된 체인)
+    E.chainSel = el('select', { class: 'field' });
+    E.chainJson = el('textarea', { class: 'field field-mono', rows: 3, placeholder: '체인 정의 JSON (steps) 붙여넣기 — 비우면 위에서 선택한 저장된 체인 사용' });
+    E.chainWrap = el('div', { class: 'field-col', hidden: true }, [
+      el('label', { text: '체인 선택 (Chain 탭에서 저장한 체인)' }), E.chainSel,
+      el('label', { text: '또는 체인 정의 JSON' }), E.chainJson,
+      el('div', { class: 'field-note', text: '각 행에서 {{컬럼}} 보간 결과가 체인의 input 으로 전달됩니다. 저장된 체인이 없으면 Chain 탭에서 먼저 저장하세요.' }),
+    ]);
+
+    sec.appendChild(el('div', { class: 'field-col' }, [el('label', { text: '프롬프트 템플릿  ({{컬럼}} 사용)' }), E.template]));
+    sec.appendChild(el('div', { class: 'field-col' }, [el('label', { text: 'system 프롬프트 (선택)' }), E.system]));
+    sec.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: '모드' }), E.mode, el('label', { text: '연결' }), E.prof, el('label', { text: '모델' }), E.model]));
+    sec.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: 'temp' }), E.temp, el('label', { text: 'max_tok' }), E.maxt]));
+    sec.appendChild(E.chainWrap);
+    inner.appendChild(sec);
+  }
+  function refreshChains() {
+    var saved = lsGet('llmlab.chains', {}) || {};
+    var names = Object.keys(saved);
+    E.chainSel.innerHTML = '';
+    if (!names.length) { E.chainSel.appendChild(el('option', { value: '', text: '(저장된 체인 없음)' })); return; }
+    E.chainSel.appendChild(el('option', { value: '', text: '(선택)' }));
+    names.forEach(function (n) { E.chainSel.appendChild(el('option', { value: n, text: n })); });
+  }
+  function resolveChain() {
+    var raw = E.chainJson.value.trim();
+    if (raw) { try { var c = JSON.parse(raw); if (c && (c.steps || c.nodes)) return c; toast('체인 JSON에 steps가 없습니다.', 'warn'); } catch (e) { toast('체인 JSON 파싱 실패: ' + e.message, 'err'); return null; } }
+    var name = E.chainSel.value;
+    if (name) { var saved = lsGet('llmlab.chains', {}) || {}; if (saved[name]) return saved[name]; }
+    return null;
+  }
+
+  /* --- 3. 실행 --- */
+  function buildRunSection(inner) {
+    var sec = labSection('3 · 실행');
+    E.concurrency = el('input', { type: 'range', class: 'batch-range', min: 1, max: 10, step: 1, value: 3 });
+    E.concLabel = el('span', { class: 'mono field-note', text: '동시성 3' });
+    E.concurrency.addEventListener('input', function () { E.concLabel.textContent = '동시성 ' + E.concurrency.value; });
+
+    E.runBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '▶ Run batch' });
+    E.runBtn.addEventListener('click', run);
+    E.progress = el('div', { class: 'eval-progress', hidden: true }, [el('div', { class: 'eval-progress__bar' })]);
+    E.progressTxt = el('span', { class: 'mono field-note' });
+
+    sec.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: '동시 실행(concurrency)' }), E.concurrency, E.concLabel]));
+    sec.appendChild(el('div', { class: 'field-note', text: '순차(1) ~ 병렬(10). 값이 클수록 빠르지만 서버 부하·레이트리밋에 유의하세요.' }));
+    sec.appendChild(el('div', { class: 'lab-btnrow' }, [E.runBtn, E.progressTxt]));
+    sec.appendChild(E.progress);
+    inner.appendChild(sec);
+  }
+
+  function run() {
+    if (running) { if (abortCtl) abortCtl.abort(); return; }
+    if (!dataset.rows.length) { toast('데이터셋을 먼저 파싱하세요.', 'warn'); return; }
+    var p = activeProfile();
+    var pid = E.prof.value || (p && p.id);
+    if (!pid) { toast('활성 연결이 없습니다. 연결을 추가하세요.', 'warn'); return; }
+    var mode = E.mode.value;
+    var chain = null;
+    if (mode === 'chain') { chain = resolveChain(); if (!chain) { toast('체인을 선택하거나 정의 JSON을 입력하세요.', 'warn'); return; } }
+
+    running = true; E.runBtn.textContent = '■ 중단'; E.runBtn.classList.add('is-running');
+    var ctl = new AbortController(); abortCtl = ctl;
+    E.progress.hidden = false; E.progress.querySelector('.eval-progress__bar').style.width = '0%';
+    E.progressTxt.textContent = '0 / ' + dataset.rows.length;
+    E.results.innerHTML = '';
+
+    BT.runBatch({
+      rows: dataset.rows,
+      template: E.template.value,
+      systemPrompt: E.system.value,
+      mode: mode, chain: chain,
+      profileId: pid, model: E.model.value || '',
+      params: { temperature: num(E.temp.value, 0.7), max_tokens: num(E.maxt.value, 512) },
+      concurrency: parseInt(E.concurrency.value, 10) || 3,
+      useProxy: state.ui.useProxy, signal: ctl.signal,
+      onProgress: function (pr) {
+        var pct = pr.total ? Math.round(100 * pr.done / pr.total) : 0;
+        E.progress.querySelector('.eval-progress__bar').style.width = pct + '%';
+        E.progressTxt.textContent = pr.done + ' / ' + pr.total + ' (ok ' + pr.ok + ' · 실패 ' + pr.failed + ')';
+      },
+    }).then(function (res) {
+      running = false; E.runBtn.textContent = '▶ Run batch'; E.runBtn.classList.remove('is-running');
+      E.progress.hidden = true;
+      lastRun = res;
+      renderResults();
+      toast(ctl.signal.aborted ? '중단됨 · 부분 결과' : ('배치 완료 · ' + res.stats.ok + '/' + res.stats.count + ' 성공'), ctl.signal.aborted ? 'warn' : 'ok');
+    }).catch(function (e) {
+      running = false; E.runBtn.textContent = '▶ Run batch'; E.runBtn.classList.remove('is-running'); E.progress.hidden = true;
+      toast('배치 오류: ' + (e && e.message || e), 'err');
+    });
+  }
+  function num(v, d) { var n = parseFloat(v); return isNaN(n) ? d : n; }
+
+  /* --- 결과 --- */
+  function renderResults() {
+    E.results.innerHTML = '';
+    if (!lastRun) return;
+    var st = lastRun.stats;
+    var sec = labSection('결과 (' + st.count + '행)', provBadge('server'));
+    // 요약 통계
+    sec.appendChild(el('div', { class: 'batch-stats' }, [
+      statChip('총', st.count), statChip('성공', st.ok, 'ok'), statChip('실패', st.failed, st.failed ? 'no' : ''),
+      statChip('총 소요', fmtMs(st.totalMs)), statChip('평균/행', fmtMs(st.avgMs)),
+    ]));
+
+    var wrap = el('div', { class: 'scroll-x' });
+    var t = el('table', { class: 'data-table data-table--compact' });
+    var inputCols = lastRun.rows.length ? Object.keys(lastRun.rows[0].vars || {}) : [];
+    t.appendChild(el('thead', {}, [el('tr', {}, [thc('#')].concat(inputCols.map(thc)).concat([thc('상태'), thc('ms'), thc('output')]))]));
+    var tb = el('tbody', {});
+    lastRun.rows.forEach(function (r) {
+      var status = r.error
+        ? el('span', { class: 'metric-pill metric-pill--no', title: (r.error.type || '') + ' ' + (r.error.message || ''), text: '실패' })
+        : el('span', { class: 'metric-pill metric-pill--ok', text: 'ok' });
+      var outText = r.error ? ('⚠ ' + (r.error.message || 'error')) : (r.output || '');
+      var outCell = el('td', { class: 'cell-output', title: outText, text: outText.length > 160 ? outText.slice(0, 160) + '…' : outText });
+      var cells = [tdc(String(r.index + 1), true)]
+        .concat(inputCols.map(function (c) { return tdc((r.vars || {})[c]); }))
+        .concat([el('td', {}, [status]), tdc(r.ms, true), outCell]);
+      tb.appendChild(el('tr', { class: r.error ? 'row-err' : '' }, cells));
+    });
+    t.appendChild(tb); wrap.appendChild(t); sec.appendChild(wrap);
+    E.results.appendChild(sec);
+
+    renderExport();
+  }
+  function statChip(k, v, kind) {
+    return el('div', { class: 'batch-stat' + (kind ? ' batch-stat--' + kind : '') }, [el('i', { text: k }), el('b', { class: 'mono', text: String(v) })]);
+  }
+
+  function renderExport() {
+    var sec = el('div', { class: 'lab-btnrow' });
+    var csvBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'CSV 다운로드' });
+    csvBtn.addEventListener('click', function () { downloadFile('batch_results.csv', BT.toCSV(lastRun), 'text/csv'); });
+    var jsonlBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'JSONL 다운로드' });
+    jsonlBtn.addEventListener('click', function () { downloadFile('batch_results.jsonl', BT.toJSONL(lastRun), 'application/x-ndjson'); });
+    var csvCopy = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'CSV 복사' });
+    csvCopy.addEventListener('click', function () { copyText(BT.toCSV(lastRun)).then(function () { toast('CSV 클립보드 복사'); }); });
+    var jsonlCopy = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'JSONL 복사' });
+    jsonlCopy.addEventListener('click', function () { copyText(BT.toJSONL(lastRun)).then(function () { toast('JSONL 클립보드 복사'); }); });
+    sec.appendChild(el('span', { class: 'field-note', text: '내보내기: 입력 컬럼 + output + status + error + ms' }));
+    sec.appendChild(csvBtn); sec.appendChild(jsonlBtn); sec.appendChild(csvCopy); sec.appendChild(jsonlCopy);
+    E.results.appendChild(sec);
+  }
 
   return { build: build, onShow: function () {} };
 })();
