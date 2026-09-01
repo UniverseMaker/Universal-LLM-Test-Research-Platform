@@ -208,6 +208,147 @@ function meanVec(vecs, dim) {
   return out;
 }
 
+/* ============================================================
+   3b. 임베딩 시각화 프리미티브 — 유사도 행렬 · 2D 투영(PCA)
+       [browser·node · 순수 로직 · 결정적]  cosine/embed 재사용
+   ============================================================ */
+// N×N 대칭 코사인 유사도 행렬(대각=1). 벡터 0/1개 경계 처리.
+function cosineMatrix(vectors) {
+  var n = (vectors && vectors.length) || 0;
+  var m = new Array(n);
+  for (var i = 0; i < n; i++) m[i] = new Array(n);
+  for (var i2 = 0; i2 < n; i2++) {
+    m[i2][i2] = 1;
+    for (var j = i2 + 1; j < n; j++) {
+      var c = cosine(vectors[i2], vectors[j]);
+      m[i2][j] = c; m[j][i2] = c;
+    }
+  }
+  return m;
+}
+
+// 결정적 시드 벡터(고정 해시 — Math.random 미사용 → 재현 가능)
+function _seedVec(dim, salt) {
+  var v = new Array(dim);
+  for (var d = 0; d < dim; d++) {
+    var s = Math.sin((d + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+    v[d] = (s - Math.floor(s)) - 0.5;   // [-0.5, 0.5)
+  }
+  return v;
+}
+function _norm(u, dim) {
+  var s = 0; for (var d = 0; d < dim; d++) s += u[d] * u[d];
+  s = Math.sqrt(s) || 1;
+  for (var d2 = 0; d2 < dim; d2++) u[d2] /= s;
+  return u;
+}
+// u에서 v방향 성분 제거(그람-슈미트)
+function _orth(u, v, dim) {
+  var dot = 0; for (var d = 0; d < dim; d++) dot += u[d] * v[d];
+  for (var d2 = 0; d2 < dim; d2++) u[d2] -= dot * v[d2];
+  return u;
+}
+// 결정적 2D 투영: 평균중심화 → 공분산(X^T X)의 상위 2 고유벡터를
+// 파워 이터레이션 + 디플레이션으로 근사. 반환 [{x,y}]. <2벡터/저차원 경계 처리.
+function pca2(vectors) {
+  var n = (vectors && vectors.length) || 0;
+  if (n === 0) return [];
+  var dim = (vectors[0] && vectors[0].length) || 0;
+  if (dim === 0) { var z = []; for (var i0 = 0; i0 < n; i0++) z.push({ x: 0, y: 0 }); return z; }
+
+  // 평균중심화
+  var mean = new Array(dim).fill(0);
+  for (var i = 0; i < n; i++) { var vi = vectors[i]; for (var d = 0; d < dim; d++) mean[d] += (vi[d] || 0); }
+  for (var d1 = 0; d1 < dim; d1++) mean[d1] /= n;
+  var X = new Array(n);
+  for (var i2 = 0; i2 < n; i2++) {
+    var row = new Array(dim), vv = vectors[i2];
+    for (var d2 = 0; d2 < dim; d2++) row[d2] = (vv[d2] || 0) - mean[d2];
+    X[i2] = row;
+  }
+
+  // 경계: 벡터<2개 또는 차원<2 → 축 하나(또는 0)만 의미. 첫 성분/0으로 채움.
+  if (n < 2 || dim < 2) {
+    var out0 = new Array(n);
+    for (var k = 0; k < n; k++) out0[k] = { x: X[k][0] || 0, y: dim > 1 ? (X[k][1] || 0) : 0 };
+    return out0;
+  }
+
+  // C·u = X^T (X u)  (공분산 명시 구성 없이 적용 — dim 큰 경우 효율적)
+  function applyC(u) {
+    var xu = new Array(n);
+    for (var a = 0; a < n; a++) { var s = 0, xa = X[a]; for (var d = 0; d < dim; d++) s += xa[d] * u[d]; xu[a] = s; }
+    var res = new Array(dim).fill(0);
+    for (var a2 = 0; a2 < n; a2++) { var xa2 = X[a2], c = xu[a2]; for (var d3 = 0; d3 < dim; d3++) res[d3] += xa2[d3] * c; }
+    return res;
+  }
+  var ITERS = 100;
+
+  // 1축
+  var v1 = _norm(_seedVec(dim, 1), dim);
+  for (var t = 0; t < ITERS; t++) v1 = _norm(applyC(v1), dim);
+  var Cv1 = applyC(v1); var lambda1 = 0; for (var d4 = 0; d4 < dim; d4++) lambda1 += v1[d4] * Cv1[d4];
+
+  // 2축 — 디플레이션(C - λ1 v1 v1^T) + 매 스텝 v1 직교화
+  function applyC2(u) {
+    var cu = applyC(u);
+    var dot = 0; for (var d = 0; d < dim; d++) dot += v1[d] * u[d];
+    for (var d5 = 0; d5 < dim; d5++) cu[d5] -= lambda1 * dot * v1[d5];
+    return cu;
+  }
+  var v2 = _norm(_orth(_seedVec(dim, 2), v1, dim), dim);
+  for (var t2 = 0; t2 < ITERS; t2++) v2 = _norm(_orth(applyC2(v2), v1, dim), dim);
+
+  // 중심화 좌표를 v1,v2에 사영
+  var coords = new Array(n);
+  for (var p = 0; p < n; p++) {
+    var x = 0, y = 0, xp = X[p];
+    for (var d6 = 0; d6 < dim; d6++) { x += xp[d6] * v1[d6]; y += xp[d6] * v2[d6]; }
+    coords[p] = { x: x, y: y };
+  }
+  return coords;
+}
+
+// i번째 벡터에 가장 가까운 k개 → [{i, sim}] (자기 자신 제외, 유사도 내림차순)
+function neighbors(vectors, i, k) {
+  var n = (vectors && vectors.length) || 0;
+  if (i < 0 || i >= n) return [];
+  var arr = [];
+  for (var j = 0; j < n; j++) { if (j === i) continue; arr.push({ i: j, sim: cosine(vectors[i], vectors[j]) }); }
+  arr.sort(function (a, b) { return b.sim - a.sim; });
+  return arr.slice(0, (k && k > 0) ? k : arr.length);
+}
+
+// texts(+query)를 임베딩 → {vectors, dim, provider, sim, coords, texts, query:{...}}
+// embed(server/approx 폴백) 재사용. query가 있으면 texts와 함께 임베딩해 동일 PCA 공간에 배치.
+async function embedTexts(opts) {
+  opts = opts || {};
+  var texts = (opts.texts || []).map(function (t) { return t == null ? '' : String(t); })
+    .filter(function (t) { return t.trim() !== ''; });
+  var query = (opts.query != null && String(opts.query).trim() !== '') ? String(opts.query) : null;
+  var profile = opts.profile || (opts.profileId && L.profiles && L.profiles.get ? L.profiles.get(opts.profileId) : null);
+  var inputs = query ? texts.concat([query]) : texts.slice();
+  if (!inputs.length) {
+    return { op: 'embedTexts', vectors: [], dim: 0, provider: 'approx', sim: [], coords: [], texts: [], query: null, ms: 0 };
+  }
+  var emb = await embed({ input: inputs, profile: profile, useProxy: opts.useProxy, signal: opts.signal, dim: opts.dim });
+  var all = emb.vectors || [];
+  var textVecs = query ? all.slice(0, all.length - 1) : all;
+  var queryVec = query ? all[all.length - 1] : null;
+  var sim = cosineMatrix(textVecs);
+  var coordsAll = pca2(all);   // texts+query 동일 공간 투영
+  var coords = query ? coordsAll.slice(0, coordsAll.length - 1) : coordsAll;
+  var queryObj = null;
+  if (query) {
+    var qsims = textVecs.map(function (v) { return cosine(queryVec, v); });
+    queryObj = { text: query, vector: queryVec, coords: coordsAll[coordsAll.length - 1], sims: qsims };
+  }
+  return {
+    op: 'embedTexts', vectors: textVecs, dim: emb.dim, provider: emb.provider,
+    sim: sim, coords: coords, texts: texts, query: queryObj, ms: emb.ms,
+  };
+}
+
 // BM25 인덱스 구축
 function buildBM25(chunks) {
   var N = chunks.length;
@@ -957,10 +1098,20 @@ L.rag = {
   rerank: rerank,
   buildContext: buildContext,
   buildGraph: buildGraph,
+  // 임베딩 시각화 도구 (§Embeddings Explorer) — additive
+  embedTools: {
+    cosine: cosine,
+    cosineMatrix: cosineMatrix,
+    pca2: pca2,
+    neighbors: neighbors,
+    embedTexts: embedTexts,
+  },
   // 프리미티브(테스트/재사용)
   _tokenize: tokenize, _cosine: cosine, _bm25: { build: buildBM25, scores: bm25Scores }, _rrf: rrfFuse, _approxEmbed: approxEmbed,
   _parseRerankScores: parseRerankScores, _stripFences: stripFences,
 };
+// window.LLMLab.embedTools 로도 노출(계약 상 두 경로 지원)
+L.embedTools = L.rag.embedTools;
 L.chain = {
   run: runChain,
   validate: validateChain,

@@ -64,6 +64,27 @@ Testing an LLM endpoint usually means scattered `curl` commands, throwaway Pytho
 |---|---|
 | ![Agent](docs/images/agent.svg) | ![Eval](docs/images/eval.svg) |
 
+| Retrieval evaluation (nDCG / MRR / MAP) | Endpoint benchmarking |
+|---|---|
+| ![Retrieval eval](docs/images/retrieval-eval.svg) | ![Benchmark](docs/images/bench.svg) |
+
+![Embeddings explorer](docs/images/embeddings.svg)
+
+### Research toolkit
+
+Beyond the core workbenches, LLM Lab includes a research layer for *measuring* — not just demonstrating — LLM behavior:
+
+- **Reranking** — retrieve → fuse → rerank (cross‑encoder or LLM‑as‑reranker), with before/after rank deltas.
+- **Retrieval evaluation** — nDCG@k · MRR · Recall@k · Precision@k · MAP over a labeled query set; compare BM25 / dense / hybrid / hybrid+rerank.
+- **Batch runner** — run a prompt or chain over a CSV/JSONL dataset with `{{column}}` templating and export.
+- **Parameter sweep** — grid search over sampling params; compare outputs, self‑consistency, and length.
+- **Endpoint benchmarking** — latency percentiles (p50/p95/p99 TTFT & total), throughput, error rate, and a concurrency sweep.
+- **Embeddings explorer** — similarity heatmap + 2D PCA projection + nearest neighbors.
+- **Structured‑output conformance** — validate model output against a JSON schema over N samples; conformance rate + failure breakdown.
+- **Context stress test** — needle‑in‑a‑haystack across (context length × depth) with a pass‑rate heatmap.
+- **Safety probes** — a defensive refusal/over‑refusal evaluation harness (ships with benign/placeholder probes only).
+- **Reproducibility bundle + cost dashboard** — export an experiment as one shareable JSON (API keys redacted) and track token usage / estimated cost.
+
 ### Quick start
 
 **Option A — Static (simplest).** Serve the folder with any static web server (or open `index.html` directly):
@@ -200,6 +221,27 @@ LLM 엔드포인트를 테스트하려면 보통 흩어진 `curl` 명령, 일회
 | RAG Lab (하이브리드/RRF) | 프롬프트 체이닝 |
 |---|---|
 | ![RAG](docs/images/rag.svg) | ![체인](docs/images/chain.svg) |
+
+| 검색 평가 (nDCG / MRR / MAP) | 엔드포인트 벤치마킹 |
+|---|---|
+| ![검색평가](docs/images/retrieval-eval.svg) | ![벤치마크](docs/images/bench.svg) |
+
+![임베딩 익스플로러](docs/images/embeddings.svg)
+
+### 연구 툴킷 (Research toolkit)
+
+핵심 워크벤치 위에, LLM 동작을 *시연*이 아니라 *측정*하는 연구 계층을 제공합니다:
+
+- **리랭킹** — retrieve → fuse → rerank(cross‑encoder 또는 LLM 리랭커), 재정렬 전/후 순위 변화.
+- **검색 평가** — 라벨셋에 대한 nDCG@k · MRR · Recall@k · Precision@k · MAP; BM25/Dense/하이브리드/하이브리드+리랭크 비교.
+- **배치 러너** — CSV/JSONL 데이터셋에 `{{column}}` 템플릿으로 프롬프트/체인 일괄 실행·내보내기.
+- **파라미터 스윕** — 샘플링 파라미터 그리드 서치; 출력·자기일관성·길이 비교.
+- **엔드포인트 벤치마킹** — 지연 percentile(p50/p95/p99 TTFT·총지연)·처리량·에러율·동시성 스윕.
+- **임베딩 익스플로러** — 유사도 히트맵 + 2D PCA 투영 + 최근접 이웃.
+- **구조적 출력 준수율** — N회 샘플을 JSON 스키마로 검증; 준수율 + 실패 필드 집계.
+- **컨텍스트 스트레스 테스트** — needle‑in‑a‑haystack, (컨텍스트 길이 × 깊이) 회수율 히트맵.
+- **안전성 프로브** — 방어적 거부/과잉거부 평가 하네스(내장 프로브는 무해/플레이스홀더만).
+- **재현성 번들 + 비용 대시보드** — 실험을 공유 가능한 JSON으로 내보내기(API 키 마스킹) + 토큰 사용량·추정 비용 추적.
 
 ### 빠른 시작
 
