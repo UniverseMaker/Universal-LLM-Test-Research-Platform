@@ -574,6 +574,28 @@ var LLM_KNOWN_KEYS = ['schemaVersion', 'service', 'network', 'base_url', 'host',
 var DB_KNOWN_KEYS = ['schemaVersion', 'kind', 'id', '__id', 'label', 'type', 'network', 'connection', 'options', 'vector', 'graph', 'notes', 'connections', 'exportedAt'];
 function _isObj(x) { return x && typeof x === 'object' && !Array.isArray(x); }
 
+// AI에게 줄 프롬프트(가이드 8장과 동일) — 사용자가 임의 AI에 붙여넣어 연결 JSON을 생성하게 함
+var DB_AI_PROMPT = [
+  '너는 "LLM Lab" 플랫폼의 DB 연결 JSON 생성기다. 아래 규칙과 스키마를 지켜, 내가 준 접속 정보를 연결 JSON으로만 출력하라.',
+  '',
+  '[출력 규칙]',
+  '1. 순수 JSON 하나만 출력한다. 설명 문장·코드펜스·주석 없이 JSON 본문만.',
+  '2. 최상위 봉투: { "schemaVersion":"1", "kind":"db-connection", "label":<필수, 사람이 읽는 이름>, "type":<sqlite|mysql|postgres|pgvector|neo4j>, "network":<선택>, "connection":{...}, "options":{...}, ... }',
+  '3. type별 connection 필수:',
+  '   - sqlite   → { "db_path": "..." }',
+  '   - mysql    → { "host":"...", "port":3306, "database":"...", "user":"...", "password":"..." }',
+  '   - postgres → { "host":"...", "port":5432, "database":"...", "user":"...", "password":"..." }',
+  '   - pgvector → postgres와 동일 + 최상위에 "vector":{ "table":<필수>, "embedding_column":<필수>, "id_column":"id", "text_column":"text", "metadata_columns":[...], "dim":<정수>, "metric":"cosine", "index":"hnsw" }',
+  '   - neo4j    → { "host" 또는 "uri" 필수, "port":7473, "database":"neo4j", "user":"...", "password":"..." } + 최상위에 "graph":{ "entity_label":"Entity", "community_label":"Community", "rel_types":[...], "name_property":"name", "summary_property":"summary" }',
+  '4. options 기본: { "readonly": true, "connect_timeout_ms":10000, "statement_timeout_ms":15000, "row_cap":200 }. 쓰기가 꼭 필요할 때만 readonly:false.',
+  '5. 접근 제약(로컬/인트라넷/공개)은 "network"와 "notes"[]에 적는다.',
+  '6. 비밀번호를 모르면 "password":"YOUR_PASSWORD" 로 둔다(내가 나중에 채운다).',
+  '7. type을 확신할 수 없으면 나에게 되묻지 말고 가장 그럴듯한 하나를 고르고 notes에 근거를 적는다.',
+  '',
+  '[내 접속 정보]',
+  '<여기에 host/port/DB종류/계정/테이블 등 아는 대로 적기>'
+].join('\n');
+
 // 모듈 레벨 아코디언 빌더(폼 내부 acc()와 동일 스타일)
 function makeAcc(title, hint, open, inner, attrs) {
   attrs = attrs || {};
@@ -589,20 +611,93 @@ function makeAcc(title, hint, open, inner, attrs) {
 function buildJsonPasteSection(kind) {
   var isDb = kind === 'db';
   var ta = el('textarea', { class: 'field field-mono', rows: 6, placeholder: isDb
-    ? '{ "kind":"db-connection", "label":"연구 코퍼스", "type":"pgvector", "connection":{ "host":"db.example.com", "port":5432, "database":"ragdb", "user":"rag_ro" }, "vector":{ "table":"chunks", "embedding_column":"embedding", "dim":384 } }'
+    ? '{ "kind":"db-connection", "label":"연구 코퍼스", "type":"pgvector", "connection":{ "host":"db.example.com", "port":5432, "database":"ragdb", "user":"rag_ro", "password":"YOUR_PASSWORD" }, "vector":{ "table":"chunks", "embedding_column":"embedding", "dim":384 } }'
     : '{ "service":"My vLLM", "base_url":"https://host/v1", "model":"모델id", "auth":{ "type":"bearer", "api_key":"..." } }' });
   var report = el('div', { class: 'paste-report', hidden: 'hidden' });
-  var analyzeBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '분석하여 채우기' });
-  analyzeBtn.addEventListener('click', function () { runPasteAnalyze(kind, ta, report); });
   var clearBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '지우기' });
   clearBtn.addEventListener('click', function () { ta.value = ''; report.hidden = true; report.innerHTML = ''; });
-  var hint = el('p', { class: 'modal__hint', html:
-    'JSON을 붙여넣고 <b>분석하여 채우기</b>를 누르면 아래 폼이 자동으로 채워집니다(로컬 파싱, AI 호출 없음). '
-    + '단일 객체 · 배열 · 묶음(' + (isDb ? '<code>type:"llm-lab-db-connections"</code>' : '<code>type:"llm-lab-profiles"</code>') + ') 모두 인식합니다. '
-    + '값은 채워진 뒤에도 직접 수정할 수 있고, <b>저장</b> 전까지 등록되지 않습니다. 형식 정본: <code>docs/API_프로필_형식_가이드.md</code>' });
-  return makeAcc('JSON 붙여넣기 → 자동 채우기', 'AI 불필요 · 로컬 파싱', false,
-    [hint, el('div', { class: 'field-col' }, [ta]), el('div', { class: 'side-actions' }, [analyzeBtn, clearBtn]), report],
+
+  var actionsRow, hint, extraRow = null;
+  if (isDb) {
+    // 바로 등록(주) — 유효하면 즉시 연결 추가(단일·배열·묶음 모두)
+    var registerBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '분석하여 바로 등록' });
+    registerBtn.addEventListener('click', function () { runDbPasteRegister(ta, report); });
+    // 폼 채우기(부) — 검토용, 저장 전까지 등록 안 함
+    var fillBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '폼 채우기 (검토)' });
+    fillBtn.addEventListener('click', function () { runPasteAnalyze('db', ta, report); });
+    actionsRow = el('div', { class: 'side-actions' }, [registerBtn, fillBtn, clearBtn]);
+    // 형식 가이드 링크 + AI 프롬프트 복사
+    var guideLink = el('a', { class: 'btn btn-ghost btn-sm', href: 'docs/DB_연결_형식_가이드.md', target: '_blank', rel: 'noopener', text: '형식 가이드 열기' });
+    var promptBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'AI에게 줄 프롬프트 복사' });
+    promptBtn.addEventListener('click', function () {
+      copyText(DB_AI_PROMPT).then(function () { promptBtn.textContent = '복사됨! (AI에 붙여넣기)'; setTimeout(function () { promptBtn.textContent = 'AI에게 줄 프롬프트 복사'; }, 1800); });
+    });
+    extraRow = el('div', { class: 'side-actions' }, [guideLink, promptBtn]);
+    hint = el('p', { class: 'modal__hint', html:
+      'JSON을 붙여넣고 <b>분석하여 바로 등록</b>을 누르면 유효한 연결이 <b>즉시</b> 등록됩니다(단일·배열·묶음 <code>type:"llm-lab-db-connections"</code> 모두). '
+      + '검토가 필요하면 <b>폼 채우기</b>로 아래 폼에 채운 뒤 <b>저장</b>하세요. 로컬 파싱 · AI 호출 없음. '
+      + 'AI로 JSON을 만들려면 <b>AI에게 줄 프롬프트 복사</b>를 눌러 임의의 AI에 붙여넣고 결과를 여기 붙이세요. 형식 정본: <code>docs/DB_연결_형식_가이드.md</code>' });
+  } else {
+    var analyzeBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '분석하여 채우기' });
+    analyzeBtn.addEventListener('click', function () { runPasteAnalyze(kind, ta, report); });
+    actionsRow = el('div', { class: 'side-actions' }, [analyzeBtn, clearBtn]);
+    hint = el('p', { class: 'modal__hint', html:
+      'JSON을 붙여넣고 <b>분석하여 채우기</b>를 누르면 아래 폼이 자동으로 채워집니다(로컬 파싱, AI 호출 없음). '
+      + '단일 객체 · 배열 · 묶음(<code>type:"llm-lab-profiles"</code>) 모두 인식합니다. '
+      + '값은 채워진 뒤에도 직접 수정할 수 있고, <b>저장</b> 전까지 등록되지 않습니다. 형식 정본: <code>docs/API_프로필_형식_가이드.md</code>' });
+  }
+  var children = [hint, el('div', { class: 'field-col' }, [ta]), actionsRow];
+  if (extraRow) children.push(extraRow);
+  children.push(report);
+  return makeAcc('JSON 붙여넣기', isDb ? '바로 등록 · AI 불필요' : 'AI 불필요 · 로컬 파싱', isDb, children,
     { class: 'acc json-paste' });
+}
+
+// DB: 붙여넣은 JSON을 검증 후 유효하면 즉시 등록(단일·배열·묶음). 무효는 등록 안 하고 리포트.
+function runDbPasteRegister(ta, reportEl) {
+  var text = (ta.value || '').trim();
+  if (!text) { pasteReportError(reportEl, 'JSON을 먼저 붙여넣어 주세요.'); return; }
+  var data;
+  try { data = JSON.parse(text); }
+  catch (e) { pasteReportError(reportEl, 'JSON 파싱 실패 — ' + _jsonErrHint(text, e)); return; }
+  var det = _pasteDetect(data, 'db');
+  if (!det.list.length) { pasteReportError(reportEl, '유효한 DB 연결 객체를 찾지 못했습니다.'); return; }
+  var before = L.db.list().length;
+  var res = L.db.import(text, { onDuplicate: function () { return 'add'; } });
+  renderDbRegisterReport(reportEl, res, det);
+  if (res.added.length) {
+    toast('DB 연결 ' + res.added.length + '개 등록됨 (총 ' + (before + res.added.length) + ')', 'ok');
+    if (typeof renderDbList === 'function') renderDbList();
+  } else {
+    toast('등록된 연결이 없습니다 — 오류를 확인하세요.', 'warn');
+  }
+}
+
+function renderDbRegisterReport(reportEl, res, det) {
+  reportEl.hidden = false; reportEl.innerHTML = '';
+  var addedN = res.added.length;
+  reportEl.appendChild(el('div', { class: 'paste-report__title',
+    text: addedN ? ('등록 완료 — ' + addedN + '개 연결 추가됨') : '등록된 연결 없음 — 오류를 확인하세요' }));
+  res.added.forEach(function (p) {
+    var chips = el('div', { class: 'paste-chips' });
+    function chip(t, warn) { chips.appendChild(el('span', { class: 'paste-chip', dataset: warn ? { kind: 'warn' } : {}, text: t })); }
+    chip('✓ ' + p.label);
+    chip('type=' + p.type);
+    var c = p.connection || {};
+    if (p.type === 'sqlite') chip('db_path=' + (c.db_path || '?'), !c.db_path);
+    else if (p.type === 'neo4j') chip('target=' + (c.uri || ((c.host || '?') + ':' + (c.port || ''))));
+    else chip('host=' + (c.host || '?') + (c.port ? (':' + c.port) : ''), !c.host);
+    if (p.vector) chip('vector: ' + (p.vector.table || '?'));
+    if (p.graph) chip('graph: ' + (p.graph.entity_label || 'Entity'));
+    chip('readonly=' + (p.options && p.options.readonly ? 'on' : 'off'), p.options && p.options.readonly === false);
+    reportEl.appendChild(chips);
+  });
+  if (det.form === 'bundle' || det.form === 'array') {
+    reportEl.appendChild(el('div', { class: 'field-note', text: '묶음 감지: 총 ' + det.list.length + '개 항목 처리 (추가 ' + res.added.length + ' · 갱신 ' + res.updated.length + ' · 건너뜀 ' + res.skipped.length + ').' }));
+  }
+  (res.warnings || []).forEach(function (w) { reportEl.appendChild(el('div', { class: 'warn', text: '⚠ ' + (w.label || '') + ': ' + w.warnings.join('; ') })); });
+  (res.errors || []).forEach(function (e) { reportEl.appendChild(el('div', { class: 'err', text: '✕ ' + (e.label || '(unnamed)') + ': ' + e.errors.join('; ') })); });
+  if (addedN) reportEl.appendChild(el('div', { class: 'ok', text: '연결 목록에 추가되었습니다. 카드에서 [연결 테스트]로 확인하세요.' }));
 }
 
 function _pasteDetect(data, kind) {

@@ -134,6 +134,8 @@ The **RAG Lab** can route retrieval to real stores through `db/router.php`:
 
 Missing PHP extensions degrade gracefully (the endpoint reports what's available instead of crashing), and a bundled `_data/demo.sqlite` lets you try the flow with zero setup.
 
+DB connection setup can be verbose, so a connection can be **registered in one shot from a JSON blob** — generate it with any AI using the [DB connection format guide](docs/DB_연결_형식_가이드.md), then paste it into **New DB connection → Analyze & register**.
+
 ### Architecture
 
 ```
@@ -291,6 +293,8 @@ python server.py
 - **그래프** — **Neo4j**(HTTP API). GraphRAG 지식그래프.
 
 PHP 확장이 없으면 안전하게 강등(무엇이 가능한지 보고)되며, 번들된 `_data/demo.sqlite`로 설정 없이 흐름을 체험할 수 있습니다.
+
+DB 연결 설정이 복잡하므로, **JSON 하나로 한 번에 등록**할 수 있습니다 — [DB 연결 형식 가이드](docs/DB_연결_형식_가이드.md)를 아무 AI에 주어 연결 JSON을 생성한 뒤, **새 DB 연결 → 분석하여 바로 등록**에 붙여넣으면 됩니다.
 
 ### 아키텍처
 
