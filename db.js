@@ -457,7 +457,9 @@ async function query(opts) {
     readonly: opts.readonly !== false,
     row_cap: opts.row_cap || 200,
   };
-  if (!opts.connId && opts.profile) payload.profile = opts.profile;
+  // 미등록 connId 대비: 로컬 프로필을 실비밀번호 포함 인라인으로 동봉(test()와 동일 방식)
+  if (opts.profile) payload.profile = opts.profile;
+  else if (opts.connId) { var _prof = get(opts.connId); if (_prof) payload.profile = toUserJSON(_prof, { redactPassword: false }); }
   var t0 = perfNow();
   var r = await postDb('query', payload, opts.signal);
   if (r.ms == null) r.ms = Math.round(perfNow() - t0);
@@ -476,7 +478,9 @@ async function vectorSearch(opts) {
   };
   if (opts.embedding) payload.embedding = opts.embedding;
   if (opts.text != null) payload.text = opts.text; // 서버가 임베딩 생성(옵션)
-  if (!opts.connId && opts.profile) payload.profile = opts.profile;
+  // 미등록 connId 대비: 로컬 프로필을 실비밀번호 포함 인라인으로 동봉(test()와 동일 방식)
+  if (opts.profile) payload.profile = opts.profile;
+  else if (opts.connId) { var _prof = get(opts.connId); if (_prof) payload.profile = toUserJSON(_prof, { redactPassword: false }); }
   var t0 = perfNow();
   var r = await postDb('vector/search', payload, opts.signal);
   if (r.ms == null) r.ms = Math.round(perfNow() - t0);
@@ -493,7 +497,9 @@ async function graphQuery(opts) {
     params: opts.params || {},
   };
   if (opts.cypher) payload.cypher = opts.cypher;
-  if (!opts.connId && opts.profile) payload.profile = opts.profile;
+  // 미등록 connId 대비: 로컬 프로필을 실비밀번호 포함 인라인으로 동봉(test()와 동일 방식)
+  if (opts.profile) payload.profile = opts.profile;
+  else if (opts.connId) { var _prof = get(opts.connId); if (_prof) payload.profile = toUserJSON(_prof, { redactPassword: false }); }
   var t0 = perfNow();
   var r = await postDb('graph/query', payload, opts.signal);
   if (r.ms == null) r.ms = Math.round(perfNow() - t0);
