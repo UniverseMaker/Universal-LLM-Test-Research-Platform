@@ -472,7 +472,7 @@ async function webSearch(query, { signal } = {}) {
   if (!q) {
     return { query: q, source: null, results: [], error: '검색어가 비어 있습니다.' };
   }
-  const url = '/api/search?q=' + encodeURIComponent(q) + '&n=5';
+  const url = 'search.php?q=' + encodeURIComponent(q) + '&n=5'; // v49: 상대 직접(하위폴더 안전)
   try {
     const res = await fetch(url, { signal });
     if (!res.ok) {

@@ -100,7 +100,7 @@ var BUILTINS = {
       var url = String(a.url || '');
       if (!/^https?:\/\//i.test(url)) throw new Error('http(s) URL만 허용');
       var useProxy = ctx && ctx.useProxy;
-      var target = useProxy ? '/api/proxy' : url;
+      var target = useProxy ? 'proxy.php' : url; // v49: 상대 직접(하위폴더 안전)
       var opt = useProxy
         ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'GET', url: url, headers: {} }) }
         : { method: 'GET' };

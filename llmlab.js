@@ -33,7 +33,7 @@ const SCHEMA_VERSION = '1';
 const APP_VERSION = '24';
 const LS_PROFILES = 'llmlab.profiles';
 const LS_ACTIVE = 'llmlab.activeProfileId';
-let PROXY_PATH = '/api/proxy'; // server.py 범용 릴레이 라우트
+let PROXY_PATH = 'proxy.php'; // v49: 상대 직접 호출(하위폴더/무 .htaccess 안전). 실패 시 relayFetch가 direct-LLM 폴백.
 const RUNLOG_MAX = 500;
 const RAW_CHUNK_MAX = 800;      // 인스펙터 원시 SSE 청크 보존 상한(개수)
 const RAW_BYTES_MAX = 512 * 1024; // 원시 SSE 보존 상한(바이트)
@@ -1393,7 +1393,7 @@ const LLMLab = {
 
   // 프록시 경로 설정
   get proxyPath() { return PROXY_PATH; },
-  setProxyPath(p) { PROXY_PATH = p || '/api/proxy'; },
+  setProxyPath(p) { PROXY_PATH = p || 'proxy.php'; },
 
   // 저수준 유틸(재사용)
   util: { maskKey, deriveEndpoints, deriveHostPort, relayFetch, classifyHTTP, mergeParams },

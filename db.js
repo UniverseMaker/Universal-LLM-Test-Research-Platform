@@ -34,7 +34,13 @@ if (!L) { console.error('[db] window.LLMLab 미로드 — DB 어댑터를 붙일
 var SCHEMA_VERSION = '1';
 var LS_CONNS = 'llmlab.dbConnections';
 var LS_ACTIVE = 'llmlab.dbActiveId';
-var API_BASE = '/api/db';
+// v49: .htaccess 별칭(/api/db)에 의존하지 않고 db/router.php 를 **상대경로로 직접** 호출한다.
+//   - 상대경로는 현재 문서 기준으로 해석되어 하위폴더 배포(/rchat/index.html)에서도
+//     /rchat/db/router.php 로 정확히 도달한다(절대 /api/db 는 도메인 루트로 빗나감).
+//   - API_BASE(기본=직접 라우터)를 우선 호출, 실패 시 친화 URL(api/db)로 폴백, 그다음 mock.
+var API_BASE = 'db/router.php';        // 상대 직접(기본) — db/router.php?op=<op>
+var API_BASE_FRIENDLY = 'api/db';      // 상대 친화 URL 폴백 — api/db/<op> (.htaccess 있는 배포 대비)
+var _apiBaseResolved = null;           // 계약 JSON을 실제로 준 base를 기억(재탐색 최소화)
 
 var DB_TYPES = ['sqlite', 'mysql', 'postgres', 'pgvector', 'neo4j'];
 
@@ -323,31 +329,74 @@ function exportAll(opts) {
 /* ================================================================== */
 /* 4. PHP REST 클라이언트 (/api/db/*) — 우아한 강등                    */
 /* ================================================================== */
-// 항상 객체를 resolve (throw 안 함). 백엔드 부재/네트워크 실패 → provider:'mock', unreachable:true
+// base + op → 요청 URL. 직접 라우터(router.php)면 ?op=<op>, 친화 URL이면 /<op>.
+//   op 에 슬래시가 있는 vector/search·graph/query 는 그대로 전달 —
+//   라우터가 $_GET['op'] 를 trim('/')·strtolower 후 스위치로 받으므로 슬래시 유지가 정확.
+//   (쿼리스트링 내 '/' 는 RFC 3986 상 유효. 친화 URL은 .htaccess 정규식 [A-Za-z0-9_/-]+ 매칭.)
+function buildDbUrl(base, op) {
+  if (/router\.php/i.test(base) || base.indexOf('?') >= 0) {
+    var sep = base.indexOf('?') >= 0 ? '&' : '?';
+    return base + sep + 'op=' + op;
+  }
+  return base.replace(/\/+$/, '') + '/' + op;
+}
+
+// 폴백 후보 순서: (0) 직전에 성공한 base → (1) API_BASE(직접 router.php) → (2) 친화 URL(api/db).
+function candidateBases() {
+  var list = [];
+  function push(b) { if (b && list.indexOf(b) < 0) list.push(b); }
+  push(_apiBaseResolved);
+  push(API_BASE);
+  push(API_BASE_FRIENDLY);
+  return list;
+}
+
+// 항상 객체를 resolve (throw 안 함).
+//   "직접 우선 → 친화 URL 폴백 → mock 강등". 계약 JSON을 준 base 는 기억(_apiBaseResolved).
+//   백엔드 부재/네트워크 실패/모든 후보 404 → provider:'mock', unreachable:true (앱 안 죽음).
 async function postDb(op, payload, signal) {
-  var url = API_BASE + '/' + op;
-  var res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload || {}),
-      signal: signal,
-    });
-  } catch (e) {
-    if (signal && signal.aborted) return { ok: false, provider: 'error', aborted: true, error: '중단됨' };
-    // 네트워크/CORS/파일프로토콜 → 백엔드 미도달
-    return { ok: false, provider: 'mock', unreachable: true, error: '백엔드 미도달(네트워크): ' + (e && e.message ? e.message : e) };
+  var bases = candidateBases();
+  var bodyText = JSON.stringify(payload || {});
+  var last = null;
+  for (var i = 0; i < bases.length; i++) {
+    var base = bases[i];
+    var url = buildDbUrl(base, op);
+    var res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bodyText,
+        signal: signal,
+      });
+    } catch (e) {
+      if (signal && signal.aborted) return { ok: false, provider: 'error', aborted: true, error: '중단됨' };
+      // 네트워크/CORS/파일프로토콜 → 이 base 미도달. 다음 후보 시도.
+      last = { ok: false, provider: 'mock', unreachable: true, base: base,
+        error: '백엔드 미도달(네트워크): ' + (e && e.message ? e.message : e) };
+      continue;
+    }
+    // 라우트 없음(정적 배포/친화 URL 미매핑) → 다음 후보(친화 URL) 시도.
+    if (res.status === 404 || res.status === 405 || res.status === 501) {
+      last = { ok: false, provider: 'mock', unreachable: true, status: res.status, base: base,
+        error: 'DB 백엔드 라우트 없음(HTTP ' + res.status + ') @ ' + base };
+      continue;
+    }
+    var data = null;
+    try { data = await res.json(); } catch (e) { /* */ }
+    if (!isObj(data)) {
+      // 라우트는 응답했으나 JSON 아님(HTML 오류 등) → 다음 후보 시도할 가치 있음.
+      last = { ok: false, provider: 'error', status: res.status, base: base,
+        error: '응답 파싱 실패(HTTP ' + res.status + ')' };
+      continue;
+    }
+    // 계약 JSON 수신 성공 → 이 base 고정(server/mock/error 모두 실제 서버 응답).
+    _apiBaseResolved = base;
+    if (data.provider == null) data.provider = res.ok ? 'server' : 'error';
+    return data;
   }
-  // 정적 배포(PHP 없음) → 라우트 없음
-  if (res.status === 404 || res.status === 405 || res.status === 501) {
-    return { ok: false, provider: 'mock', unreachable: true, status: res.status, error: '/api/db 백엔드가 배포되지 않았습니다(PHP 미탑재).' };
-  }
-  var data = null;
-  try { data = await res.json(); } catch (e) { /* */ }
-  if (!isObj(data)) return { ok: false, provider: 'error', status: res.status, error: '응답 파싱 실패(HTTP ' + res.status + ')' };
-  if (data.provider == null) data.provider = res.ok ? 'server' : 'error';
-  return data;
+  // 모든 후보 실패 → mock 강등.
+  return last || { ok: false, provider: 'mock', unreachable: true, error: 'DB 백엔드 미도달(모든 경로 실패).' };
 }
 
 // 연결 테스트 — connId 또는 1회성 profile(정본 JSON)
@@ -365,7 +414,7 @@ async function test(arg, opts) {
   var t0 = perfNow();
   var r = await postDb('test', payload, opts.signal);
   if (r.ms == null) r.ms = Math.round(perfNow() - t0);
-  if (r.unreachable && !r.hint) r.hint = '정적/샌드박스 환경에서는 /api/db 가 없어 mock으로 강등됩니다. PHP 백엔드 배포 후 실제 드라이버 상태가 표시됩니다.';
+  if (r.unreachable && !r.hint) r.hint = '정적/샌드박스(또는 file://) 환경에서는 db/router.php 가 없어 mock으로 강등됩니다. PHP 백엔드 배포 후 실제 드라이버 상태가 표시됩니다.';
   // 로컬 상태 반영
   if (typeof arg === 'string') {
     var conn = get(arg);
@@ -467,7 +516,7 @@ L.db = {
   query: query, vectorSearch: vectorSearch, graphQuery: graphQuery,
   save: save, onChange: onChange, offChange: offChange,
   apiBase: function () { return API_BASE; },
-  setApiBase: function (b) { API_BASE = b || '/api/db'; },
+  setApiBase: function (b) { API_BASE = b || 'db/router.php'; _apiBaseResolved = null; },
 };
 
 if (typeof window !== 'undefined') window.LLMLab = L;
