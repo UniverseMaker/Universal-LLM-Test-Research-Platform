@@ -168,13 +168,15 @@ function db_resolve_conn($connId) {
 // 요청에서 프로필을 얻는다: connId(저장) 우선, 없으면 1회성 profile.
 // 반환 [profile|null, errStr|null]
 function db_profile_from_request($in) {
+    // 인라인 profile 우선 — 클라이언트가 연결정보를 동봉하면 서버 등록 없이 동작(브라우저 저장 연결).
+    if (isset($in['profile']) && is_array($in['profile'])) {
+        return array($in['profile'], null);
+    }
+    // profile 이 없을 때만 connId 로 서버 등록목록 조회.
     if (isset($in['connId']) && $in['connId'] !== '') {
         $p = db_resolve_conn($in['connId']);
         if ($p === null) return array(null, "등록되지 않은 connId: " . $in['connId']);
         return array($p, null);
-    }
-    if (isset($in['profile']) && is_array($in['profile'])) {
-        return array($in['profile'], null);
     }
     return array(null, "connId 또는 profile 이 필요합니다.");
 }

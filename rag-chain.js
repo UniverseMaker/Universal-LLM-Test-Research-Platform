@@ -881,10 +881,27 @@ async function buildGraph(opts) {
   var dbConn = (opts.dbConnId && L.db && typeof L.db.get === 'function') ? L.db.get(opts.dbConnId) : null;
   var graphDbNote = null;
   if (dbConn && dbConn.type === 'neo4j') {
+    // Cypher 생성 — 서버(op=graph/query)는 cypher 필수. 스키마 무관하게 그래프 구조를 반환.
+    // 질의어가 있으면 흔한 이름류 속성으로 1차 필터, 없거나 매치 없으면 전체 그래프 구조.
+    var _gk = opts.topK || 50;
+    var _gq = String(opts.query || '').trim();
+    var _cypher = _gq
+      ? 'MATCH (n) WHERE toLower(toString(coalesce(n.name, n.title, n.label, n.id, ""))) CONTAINS toLower($name) '
+        + 'WITH n LIMIT $k OPTIONAL MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $k'
+      : 'MATCH (n)-[r]->(m) RETURN n, r, m LIMIT $k';
     var gq = await L.db.graphQuery({
       connId: dbConn.id, mode: opts.mode || 'global', readonly: true,
-      params: { name: opts.query || '', k: opts.topK || 25 }, signal: opts.signal,
+      cypher: _cypher,
+      params: { name: _gq, k: _gk }, signal: opts.signal,
     });
+    // 질의어 필터로 결과가 비면 전체 그래프 구조로 폴백(빈 화면 방지)
+    if (gq && gq.ok && gq.provider === 'server' && Array.isArray(gq.nodes) && gq.nodes.length === 0 && _gq) {
+      gq = await L.db.graphQuery({
+        connId: dbConn.id, mode: opts.mode || 'global', readonly: true,
+        cypher: 'MATCH (n)-[r]->(m) RETURN n, r, m LIMIT $k',
+        params: { k: _gk }, signal: opts.signal,
+      });
+    }
     if (gq && gq.ok && gq.provider === 'server' && Array.isArray(gq.nodes)) {
       return {
         op: 'graph', provider: 'server', dbBackend: 'neo4j', dbConnLabel: dbConn.label,
