@@ -2283,6 +2283,7 @@ var RAG = (function () {
 
     buildCorpusSection(inner);
     buildQuerySection(inner);
+    buildGraphChatSection(inner);
     buildEvalSection(inner);
 
     // 결과 영역
@@ -2294,6 +2295,76 @@ var RAG = (function () {
     E.results = el('div', { id: 'ragResults' }); inner.appendChild(E.results);
 
     renderChunkPreview();
+  }
+
+  // ── 채팅형 GraphRAG (v50) ──
+  var gcHistory = [];
+  var gcBusy = false;
+  function buildGraphChatSection(inner) {
+    var sec = labSection('GraphRAG 대화 (Chat)');
+    sec.appendChild(el('div', { class: 'lab__sub', style: 'margin:-4px 0 10px', text: '위 "검색 백엔드"에서 Neo4j 연결을 선택한 뒤, 그래프에 대해 대화형으로 질문하세요. 스키마를 자동 탐색해 질문과 관련된 서브그래프를 찾아 LLM이 답변합니다.' }));
+    E.gcMsgs = el('div', { style: 'display:flex;flex-direction:column;gap:10px;max-height:440px;overflow-y:auto;padding:4px 2px;margin-bottom:10px;' });
+    sec.appendChild(E.gcMsgs);
+    E.gcStatus = el('div', { style: 'font-size:12px;color:var(--color-text-faint);font-family:var(--font-mono);min-height:16px;margin-bottom:6px;' });
+    sec.appendChild(E.gcStatus);
+    E.gcInput = el('textarea', { class: 'field field-mono', rows: 2, placeholder: '그래프에 대해 질문… (예: 어떤 종류의 노드가 있어? A와 연결된 관계는?)', style: 'resize:vertical;width:100%;' });
+    E.gcInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendGraphChat(); } });
+    E.gcSend = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '전송' });
+    E.gcSend.addEventListener('click', sendGraphChat);
+    E.gcClear = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '대화 비우기' });
+    E.gcClear.addEventListener('click', function () { gcHistory = []; if (E.gcStatus) E.gcStatus.textContent = ''; renderGC(); });
+    sec.appendChild(E.gcInput);
+    sec.appendChild(el('div', { class: 'lab-btnrow', style: 'margin-top:8px' }, [E.gcSend, E.gcClear]));
+    inner.appendChild(sec);
+    renderGC();
+  }
+  function renderGC() {
+    if (!E.gcMsgs) return;
+    E.gcMsgs.innerHTML = '';
+    if (!gcHistory.length) {
+      E.gcMsgs.appendChild(el('div', { style: 'color:var(--color-text-faint);font-size:13px;padding:8px', text: '아직 대화가 없습니다. 검색 백엔드에서 Neo4j 연결을 고르고 질문해 보세요.' }));
+      return;
+    }
+    gcHistory.forEach(function (m) {
+      var isU = m.role === 'user';
+      var bubble = el('div', { style: 'max-width:88%;padding:10px 14px;border-radius:12px;white-space:pre-wrap;line-height:1.55;font-size:14px;'
+        + (isU ? 'align-self:flex-end;background:var(--color-surface-2);border:1px solid var(--color-border);'
+               : 'align-self:flex-start;background:var(--color-surface);border:1px solid var(--color-border);') });
+      bubble.textContent = m.content;
+      E.gcMsgs.appendChild(bubble);
+      if (!isU && m.meta) E.gcMsgs.appendChild(el('div', { style: 'align-self:flex-start;font-size:11px;color:var(--color-text-faint);font-family:var(--font-mono);margin-top:-4px', text: m.meta }));
+    });
+    E.gcMsgs.scrollTop = E.gcMsgs.scrollHeight;
+  }
+  function sendGraphChat() {
+    if (gcBusy) return;
+    var q = (E.gcInput.value || '').trim();
+    if (!q) return;
+    var dbId = selectedDbConnId();
+    var dbConn = dbId && L.db && L.db.get ? L.db.get(dbId) : null;
+    if (!dbConn || dbConn.type !== 'neo4j') { toast('검색 백엔드에서 Neo4j 연결을 선택하세요.', 'warn'); return; }
+    var p = activeProfile();
+    if (!p) { toast('답변 생성을 위해 활성 LLM 연결이 필요합니다.', 'warn'); return; }
+    gcBusy = true; E.gcSend.disabled = true;
+    gcHistory.push({ role: 'user', content: q });
+    E.gcInput.value = ''; renderGC();
+    var stageMap = { schema: '① 그래프 스키마 자동 탐색 중…', retrieve: '② 질문 관련 서브그래프 검색 중…', answer: '③ 답변 생성 중…' };
+    E.gcStatus.textContent = stageMap.schema;
+    L.rag.graphChat({
+      query: q, dbConnId: dbId,
+      profile: p, profileId: p.id, model: profileModel(p), useProxy: state.ui.useProxy,
+      topK: 60, history: gcHistory.slice(0, -1),
+      onStage: function (s) { if (stageMap[s.stage]) E.gcStatus.textContent = stageMap[s.stage] + (s.stage === 'answer' ? (' (노드 ' + s.nodes + '·엣지 ' + s.edges + ')') : ''); },
+    }).then(function (r) {
+      gcBusy = false; E.gcSend.disabled = false; E.gcStatus.textContent = '';
+      if (!r || !r.ok) { gcHistory.push({ role: 'assistant', content: '⚠ ' + ((r && r.error) || '실패'), meta: r && r.cypher ? ('cypher: ' + String(r.cypher).slice(0, 160)) : '' }); renderGC(); return; }
+      var meta = '근거: 노드 ' + r.stats.nodes + ' · 엣지 ' + r.stats.edges + (r.schema ? (' · 라벨 ' + (r.schema.labels || []).length + '종·관계 ' + (r.schema.relTypes || []).length + '종') : '');
+      gcHistory.push({ role: 'assistant', content: r.answer || '(빈 답변)', meta: meta });
+      renderGC();
+    }).catch(function (e) {
+      gcBusy = false; E.gcSend.disabled = false; E.gcStatus.textContent = '';
+      gcHistory.push({ role: 'assistant', content: '⚠ 오류: ' + (e && e.message || e) }); renderGC();
+    });
   }
 
   function buildCorpusSection(inner) {

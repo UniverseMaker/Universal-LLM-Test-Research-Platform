@@ -1106,6 +1106,137 @@ function validateChain(chain) {
 }
 
 /* ============================================================
+   7.5 채팅형 GraphRAG — 스키마 자동탐색 + 질문관련 서브그래프 + LLM 답변
+   ============================================================ */
+var _graphSchemaCache = {};
+
+// 단일 스칼라 introspection Cypher 실행 → 첫 행 첫 값
+async function _gqScalar(dbConn, cypher, signal) {
+  try {
+    var r = await L.db.graphQuery({ connId: dbConn.id, readonly: true, cypher: cypher, params: {}, signal: signal });
+    if (!r || !r.ok || r.provider !== 'server') return { ok: false, error: r && r.error, value: null };
+    var rec = (r.records && r.records[0]) ? r.records[0] : null;
+    var val = rec ? (Array.isArray(rec) ? rec[0] : rec.v) : null;
+    return { ok: true, value: val };
+  } catch (e) { return { ok: false, error: e && e.message, value: null }; }
+}
+
+// 그래프 스키마 자동 탐색(라벨/관계/속성/풀텍스트 인덱스). connId별 캐시.
+async function graphDiscoverSchema(dbConn, signal, force) {
+  if (!dbConn || dbConn.type !== 'neo4j') return null;
+  if (!force && _graphSchemaCache[dbConn.id]) return _graphSchemaCache[dbConn.id];
+  var q = function (c) { return _gqScalar(dbConn, c, signal); };
+  var res = await Promise.all([
+    q('CALL db.labels() YIELD label RETURN collect(label) AS v'),
+    q('CALL db.relationshipTypes() YIELD relationshipType RETURN collect(relationshipType) AS v'),
+    q('CALL db.propertyKeys() YIELD propertyKey RETURN collect(propertyKey) AS v'),
+    q("SHOW INDEXES YIELD name, type, entityType, properties WHERE type='FULLTEXT' AND entityType='NODE' RETURN collect({name:name, props:properties}) AS v"),
+  ]);
+  var labels = res[0].value || [];
+  var relTypes = res[1].value || [];
+  var propKeys = res[2].value || [];
+  var ft = res[3].value || [];
+  var nameCands = ['name', 'title', 'label', 'text', 'value', 'id', 'key', '이름', '명칭', '제목', '주소', 'address'];
+  var lc = function (s) { return String(s).toLowerCase(); };
+  var nameProps = propKeys.filter(function (k) { return nameCands.indexOf(lc(k)) >= 0 || nameCands.indexOf(String(k)) >= 0; });
+  if (!nameProps.length) nameProps = propKeys.slice(0, 8);
+  var schema = { ok: res[0].ok, labels: labels, relTypes: relTypes, propKeys: propKeys, fulltext: ft, nameProps: nameProps,
+    error: res[0].ok ? null : (res[0].error || '스키마 탐색 실패') };
+  if (schema.ok) _graphSchemaCache[dbConn.id] = schema;
+  return schema;
+}
+
+function _graphTerms(q) {
+  var stop = { '은': 1, '는': 1, '이': 1, '가': 1, '을': 1, '를': 1, '의': 1, '에': 1, '에서': 1, '와': 1, '과': 1, '도': 1, '만': 1, 'the': 1, 'a': 1, 'an': 1, 'is': 1, 'of': 1, 'in': 1, 'to': 1 };
+  return String(q || '').replace(/[?!.,·]/g, ' ').split(/\s+/)
+    .map(function (w) { return w.trim(); })
+    .filter(function (w) { return w.length >= 2 && !stop[w.toLowerCase()]; });
+}
+
+// 질문 관련 서브그래프 검색 Cypher 구성(풀텍스트 인덱스 우선 → 이름속성 CONTAINS → 전체구조 폴백)
+async function graphRetrieveSubgraph(dbConn, query, schema, k, signal) {
+  k = k || 60;
+  var seed = Math.min(20, k);
+  var terms = _graphTerms(query);
+  var term = terms.slice(0, 4).join(' ');
+  var cypher, params;
+  if (schema && schema.fulltext && schema.fulltext.length && term) {
+    var idx = schema.fulltext[0].name;
+    var luceneQ = terms.slice(0, 6).map(function (t) { return t.replace(/[^\wㄱ-힣]/g, '') + '*'; }).filter(function (t) { return t.length > 1; }).join(' OR ');
+    cypher = 'CALL db.index.fulltext.queryNodes($idx, $q) YIELD node, score '
+           + 'WITH node ORDER BY score DESC LIMIT $seed '
+           + 'OPTIONAL MATCH (node)-[r]-(m) RETURN node AS n, r, m LIMIT $k';
+    params = { idx: idx, q: luceneQ || (term + '*'), seed: seed, k: k };
+  } else if (term && schema && schema.nameProps && schema.nameProps.length) {
+    var props = schema.nameProps.slice(0, 6).map(function (p) { return String(p).replace(/`/g, ''); });
+    var whereParts = props.map(function (p) { return 'toLower(toString(n.`' + p + '`)) CONTAINS toLower($term)'; }).join(' OR ');
+    cypher = 'MATCH (n) WHERE ' + whereParts + ' WITH n LIMIT $seed OPTIONAL MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $k';
+    params = { term: term, seed: seed, k: k };
+  } else {
+    cypher = 'MATCH (n)-[r]->(m) RETURN n, r, m LIMIT $k';
+    params = { k: k };
+  }
+  var gq = await L.db.graphQuery({ connId: dbConn.id, readonly: true, cypher: cypher, params: params, signal: signal });
+  return { gq: gq, cypher: cypher, terms: terms };
+}
+
+function _formatSubgraph(nodes, edges) {
+  var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
+  var ent = nodes.slice(0, 40).map(function (n) {
+    return '- [' + (n.type || 'node') + '] ' + (n.label || n.id) + (n.summary ? (' — ' + String(n.summary).slice(0, 120)) : '');
+  }).join('\n');
+  var rel = edges.slice(0, 60).map(function (e) {
+    var s = byId[e.source], t = byId[e.target];
+    return '- ' + ((s && s.label) || e.source) + ' -[' + (e.relation || 'REL') + ']-> ' + ((t && t.label) || e.target);
+  }).join('\n');
+  return '엔티티(' + nodes.length + '개):\n' + (ent || '(없음)') + '\n\n관계(' + edges.length + '개):\n' + (rel || '(없음)');
+}
+
+// 대화형 GraphRAG: 질문 → 스키마 → 서브그래프 → LLM 답변
+async function graphChat(opts) {
+  opts = opts || {};
+  var dbConn = (opts.dbConnId && L.db && typeof L.db.get === 'function') ? L.db.get(opts.dbConnId) : null;
+  if (!dbConn || dbConn.type !== 'neo4j') {
+    return { ok: false, error: 'Neo4j 연결이 선택되지 않았습니다. 검색 백엔드를 Neo4j 연결로 설정하세요.' };
+  }
+  var onStage = typeof opts.onStage === 'function' ? opts.onStage : function () {};
+  // 1) 스키마 자동탐색
+  onStage({ stage: 'schema' });
+  var schema = await graphDiscoverSchema(dbConn, opts.signal, opts.refreshSchema);
+  if (schema && !schema.ok) {
+    return { ok: false, error: 'Neo4j 스키마 탐색 실패: ' + (schema.error || '') + ' (자격증명/DB 확인)', schema: schema };
+  }
+  // 2) 질문 관련 서브그래프 검색
+  onStage({ stage: 'retrieve', schema: schema });
+  var ret = await graphRetrieveSubgraph(dbConn, opts.query, schema, opts.topK || 60, opts.signal);
+  var gq = ret.gq;
+  if (!gq || !gq.ok || gq.provider !== 'server') {
+    return { ok: false, error: (gq && gq.error) || 'Neo4j 검색 실패', schema: schema, cypher: ret.cypher };
+  }
+  var nodes = gq.nodes || [], edges = gq.edges || [];
+  // 3) LLM 답변 종합
+  onStage({ stage: 'answer', nodes: nodes.length, edges: edges.length });
+  var ctxText = _formatSubgraph(nodes, edges);
+  var hist = (opts.history || []).slice(-6).map(function (m) { return (m.role === 'user' ? '사용자: ' : '답변: ') + m.content; }).join('\n');
+  var prompt = '너는 지식그래프 기반 질의응답 어시스턴트다. 아래 그래프 컨텍스트(엔티티·관계)만 근거로 질문에 답하라. '
+    + '컨텍스트에 없으면 지어내지 말고 "그래프에서 관련 정보를 찾지 못했습니다"라고 답하라. 한국어로 간결·정확하게, 필요하면 근거 엔티티를 언급하라.\n\n'
+    + '[그래프 컨텍스트]\n' + ctxText + '\n\n'
+    + (hist ? ('[이전 대화]\n' + hist + '\n\n') : '')
+    + '[질문] ' + (opts.query || '');
+  var r = await kernelText({
+    module: 'graphrag', profile: opts.profile, profileId: opts.profileId, model: opts.model,
+    useProxy: opts.useProxy, params: { temperature: 0.2, stream: false }, signal: opts.signal, reasoningEnabled: false,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  if (!r.ok) return { ok: false, error: 'LLM 답변 실패: ' + (r.error && (r.error.message || r.error.type) || ''), nodes: nodes, edges: edges, schema: schema, cypher: ret.cypher };
+  return {
+    ok: true, answer: r.text || '', usage: r.result && r.result.usage,
+    nodes: nodes, edges: edges, entities: nodes.slice(0, 25), cypher: ret.cypher, schema: schema,
+    stats: { nodes: nodes.length, edges: edges.length, terms: ret.terms },
+  };
+}
+
+/* ============================================================
    8. 노출 (window.LLMLab.rag / .chain) — 엔진 객체에 "추가"
    ============================================================ */
 L.rag = {
@@ -1115,6 +1246,10 @@ L.rag = {
   rerank: rerank,
   buildContext: buildContext,
   buildGraph: buildGraph,
+  // 채팅형 GraphRAG (§7.5) — additive
+  graphChat: graphChat,
+  graphDiscoverSchema: graphDiscoverSchema,
+  graphRetrieveSubgraph: graphRetrieveSubgraph,
   // 임베딩 시각화 도구 (§Embeddings Explorer) — additive
   embedTools: {
     cosine: cosine,
