@@ -1751,6 +1751,7 @@ function initChat() {
     chatEls.fab.hidden = near;
   });
   chatEls.fab.addEventListener('click', scrollToBottom);
+  wireRagChat();
 }
 function autoGrow() {
   var ta = chatEls.input; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
@@ -1771,9 +1772,11 @@ function buildMessageEl(m, i) {
     if (m.reasoning) row.appendChild(buildReasoning(m.reasoning));
     var bubble = el('div', { class: 'msg__bubble md' });
     if (m.error) bubble.innerHTML = '<div class="msg__error"><b>' + escapeHtml(m.error.type || '오류') + '</b>' + escapeHtml(m.error.message || '') + (m.error.hint ? '<div class="hint">' + escapeHtml(m.error.hint) + '</div>' : '') + '</div>';
+    else if (m.pending && m.ragStatus && !m.content) bubble.innerHTML = '<div class="rag-status">' + escapeHtml(m.ragStatus) + '</div>';
     else if (m.pending && !m.content) bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
     else renderMarkdownInto(bubble, m.content || '');
     row.appendChild(bubble);
+    if (m.rag) row.appendChild(renderRagEvidence(m.rag));
     // 모델 뱃지 — 이 응답이 어떤 모델/도메인으로 왔는지 (전송 시점 캡처)
     if (!m.pending && (m.model || m.host)) {
       var badgeHost = m.host || hostFromURL(m.baseURL);
@@ -1809,6 +1812,41 @@ function buildMessageEl(m, i) {
   }
   return row;
 }
+// RAG 근거 상세 패널 (v51)
+function renderRagEvidence(rag) {
+  var d = el('details', { class: 'rag-ev' });
+  var sum = el('summary', {});
+  if (rag.error) { sum.textContent = '🔎 RAG 근거 — 검색 실패: ' + rag.error; d.appendChild(sum); return d; }
+  var st = rag.stats || {};
+  sum.textContent = '🔎 근거 (RAG · ' + (rag.sourceLabel || '') + ') — ' + (rag.kind === 'graph' ? ('노드 ' + (st.nodes || 0) + ' · 엣지 ' + (st.edges || 0)) : ('청크 ' + ((rag.results && rag.results.length) || 0)));
+  d.appendChild(sum);
+  var body = el('div', { class: 'rag-ev__body' });
+  function row(labelText, node) { var r = el('div', { class: 'rag-ev__row' }); r.appendChild(el('div', { class: 'rag-ev__k', text: labelText })); r.appendChild(node); body.appendChild(r); }
+  if (rag.kind === 'graph') {
+    if (rag.schema) row('스키마', el('div', { class: 'rag-ev__v', text: '라벨: ' + (rag.schema.labels || []).join(', ') + '\n관계: ' + (rag.schema.relTypes || []).slice(0, 14).join(', ') + '\n이름속성: ' + (rag.schema.nameProps || []).join(', ') }));
+    if (rag.cypher) { var c = el('pre', { class: 'rag-ev__code' }); c.textContent = rag.cypher; row('검색 Cypher', c); }
+    var ents = (rag.entities || rag.nodes || []).slice(0, 40);
+    if (ents.length) {
+      var et = el('div', { class: 'rag-ev__v' });
+      ents.forEach(function (n) { et.appendChild(el('div', { class: 'rag-ev__ent' }, [el('span', { class: 'rag-ev__tag', text: n.type || 'node' }), el('span', { text: ' ' + (n.label || n.id) + (n.summary ? (' — ' + String(n.summary).slice(0, 100)) : '') })])); });
+      row('엔티티 (' + ((rag.nodes && rag.nodes.length) || ents.length) + ')', et);
+    }
+    var byId = {}; (rag.nodes || []).forEach(function (n) { byId[n.id] = n; });
+    var rels = (rag.edges || []).slice(0, 50);
+    if (rels.length) {
+      var rt = el('div', { class: 'rag-ev__v mono' });
+      rels.forEach(function (e) { var s = byId[e.source], t = byId[e.target]; rt.appendChild(el('div', { text: ((s && s.label) || e.source) + ' -[' + (e.relation || 'REL') + ']-> ' + ((t && t.label) || e.target) })); });
+      row('관계 (' + ((rag.edges && rag.edges.length) || 0) + ')', rt);
+    }
+  } else {
+    var vv = el('div', { class: 'rag-ev__v' });
+    (rag.results || []).forEach(function (r, i) { vv.appendChild(el('div', { class: 'rag-ev__ent', html: '<b>[' + (i + 1) + ']</b> ' + escapeHtml((r.text || '').slice(0, 220)) + (r.score != null ? (' <span class="rag-ev__tag">' + r.score.toFixed(3) + '</span>') : '') })); });
+    row('검색 청크 (' + ((rag.results && rag.results.length) || 0) + ')', vv);
+  }
+  if (rag.contextText) { var cx = el('pre', { class: 'rag-ev__code' }); cx.textContent = rag.contextText; row('LLM 전달 컨텍스트', cx); }
+  d.appendChild(body);
+  return d;
+}
 function buildReasoning(text) {
   var wrap = el('div', { class: 'reasoning is-open' });
   var head = el('button', { type: 'button', class: 'reasoning__head' }, []);
@@ -1829,31 +1867,90 @@ function sendChat() {
   chatEls.input.value = ''; autoGrow(); renderChat();
 
   var reasoningEnabled = $('#reasonToggle').checked;
+  var ragOn = $('#ragToggle') && $('#ragToggle').checked;
+  var ragSrc = $('#ragChatSource') ? $('#ragChatSource').value : '';
   state.streaming = true; chatEls.send.classList.add('is-streaming'); chatEls.send.disabled = false;
   var ctl = new AbortController(); state.abortCtl = ctl;
 
-  var messages = state.chat.filter(function (m) { return !m.pending && (m.role === 'user' || (m.role === 'assistant' && m.content)); })
+  var baseMessages = state.chat.filter(function (m) { return !m.pending && (m.role === 'user' || (m.role === 'assistant' && m.content)); })
     .map(function (m) { return { role: m.role, content: m.content }; });
 
-  L.kernel.run({
-    module: 'chat', profileId: p.id, model: mdl,
-    messages: messages, stream: state.sessionParams.stream !== false, useProxy: state.ui.useProxy,
-    params: state.sessionParams, extraHeaders: activeHeaders(), reasoningEnabled: reasoningEnabled,
-    signal: ctl.signal,
-    onToken: function (d) { asst.content += d; updatePendingBubble(asst); },
-    onReasoning: function (d) { asst.reasoning += d; updatePendingBubble(asst); },
-    onDone: function (r) { finalizeAssistant(asst, r); },
-    onError: function (err) { asst.pending = false; asst.error = err; state.streaming = false; chatEls.send.classList.remove('is-streaming'); autoGrow(); renderChat(); saveChat(); },
-  });
+  function runKernel(messages) {
+    L.kernel.run({
+      module: 'chat', profileId: p.id, model: mdl,
+      messages: messages, stream: state.sessionParams.stream !== false, useProxy: state.ui.useProxy,
+      params: state.sessionParams, extraHeaders: activeHeaders(), reasoningEnabled: reasoningEnabled,
+      signal: ctl.signal,
+      onToken: function (d) { asst.content += d; updatePendingBubble(asst); },
+      onReasoning: function (d) { asst.reasoning += d; updatePendingBubble(asst); },
+      onDone: function (r) { finalizeAssistant(asst, r); },
+      onError: function (err) { asst.pending = false; asst.error = err; state.streaming = false; chatEls.send.classList.remove('is-streaming'); autoGrow(); renderChat(); saveChat(); },
+    });
+  }
+
+  if (ragOn && ragSrc) {
+    asst.ragStatus = '🔎 RAG 검색 중…'; updatePendingBubble(asst);
+    fetchRagContext(text, ragSrc, p, ctl.signal).then(function (rc) {
+      asst.ragStatus = '';
+      if (!rc.ok) { asst.rag = { error: rc.error, source: ragSrc }; runKernel(baseMessages); return; }
+      asst.rag = rc.evidence;
+      var sys = { role: 'system', content: '다음은 사용자 질문과 관련해 검색된 컨텍스트다. 이 컨텍스트를 근거로 사실에 기반해 한국어로 답하라. 컨텍스트에 없는 내용은 지어내지 말고 모른다고 하라.\n\n[검색 컨텍스트]\n' + rc.contextText };
+      updatePendingBubble(asst);
+      runKernel([sys].concat(baseMessages));
+    }).catch(function (e) { asst.ragStatus = ''; asst.rag = { error: String(e && e.message || e), source: ragSrc }; runKernel(baseMessages); });
+  } else {
+    runKernel(baseMessages);
+  }
 }
 function activeHeaders() { return state.extraHeaders.filter(function (h) { return h.enabled !== false && h.name; }); }
+
+// ── Chat RAG (v51): 검색 컨텍스트 확보 + 소스 선택 ──
+function fetchRagContext(query, sourceVal, profile, signal) {
+  var dbConn = L.db && L.db.get ? L.db.get(sourceVal) : null;
+  if (dbConn && dbConn.type === 'neo4j') {
+    return L.rag.graphContext({ query: query, dbConnId: sourceVal, topK: 60, signal: signal }).then(function (gc) {
+      if (!gc.ok) return { ok: false, error: gc.error };
+      return { ok: true, contextText: gc.contextText, evidence: {
+        kind: 'graph', source: sourceVal, sourceLabel: dbConn.label,
+        nodes: gc.nodes, edges: gc.edges, cypher: gc.cypher,
+        schema: gc.schema ? { labels: gc.schema.labels, relTypes: gc.schema.relTypes, nameProps: gc.schema.nameProps } : null,
+        entities: gc.entities, stats: gc.stats, contextText: gc.contextText } };
+    });
+  }
+  if (dbConn && dbConn.type === 'pgvector') {
+    return L.rag.retrieve({ query: query, mode: 'vector', profile: profile, model: profileModel(profile), useProxy: state.ui.useProxy, dbConnId: sourceVal, params: { top_k: 8 }, signal: signal })
+      .then(function (res) {
+        var ctx = L.rag.buildContext(res.results || [], { maxChars: 4000 });
+        return { ok: true, contextText: ctx.contextText || '', evidence: { kind: 'vector', source: sourceVal, sourceLabel: dbConn.label, results: (res.results || []).slice(0, 12), citations: ctx.citations, contextText: ctx.contextText } };
+      });
+  }
+  return Promise.resolve({ ok: false, error: 'RAG 소스(DB 연결)를 선택하세요.' });
+}
+function populateRagChatSource() {
+  var sel = $('#ragChatSource'); if (!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '';
+  var conns = (L.db && L.db.list) ? L.db.list().filter(function (c) { return c.type === 'neo4j' || c.type === 'pgvector'; }) : [];
+  if (!conns.length) { sel.appendChild(el('option', { value: '', text: 'DB 연결 없음' })); sel.disabled = true; return; }
+  sel.disabled = false;
+  conns.forEach(function (c) { sel.appendChild(el('option', { value: c.id, text: (c.label || c.id) + ' · ' + c.type })); });
+  if (cur && conns.some(function (c) { return c.id === cur; })) sel.value = cur;
+}
+function wireRagChat() {
+  var t = $('#ragToggle'), sel = $('#ragChatSource');
+  if (!t || !sel) return;
+  function upd() { sel.hidden = !t.checked; if (t.checked) populateRagChatSource(); }
+  t.addEventListener('change', upd);
+  upd();
+  if (L.db && L.db.onChange) L.db.onChange(populateRagChatSource);
+}
 function updatePendingBubble(asst) {
   // 스트리밍 중 마지막 메시지만 부분 렌더(성능)
   var rows = chatEls.list.children; var row = rows[rows.length - 1]; if (!row) return;
   var bubble = row.querySelector('.msg__bubble');
   if (asst.reasoning && !row.querySelector('.reasoning')) { row.insertBefore(buildReasoning(asst.reasoning), bubble); }
   else if (asst.reasoning) { var rb = row.querySelector('.reasoning__body'); if (rb) rb.textContent = asst.reasoning; }
-  if (bubble) { if (asst.content) renderMarkdownInto(bubble, asst.content); }
+  if (bubble) { if (asst.content) renderMarkdownInto(bubble, asst.content); else if (asst.ragStatus) bubble.innerHTML = '<div class="rag-status">' + escapeHtml(asst.ragStatus) + '</div>'; }
   var near = chatEls.scroll.scrollHeight - chatEls.scroll.scrollTop - chatEls.scroll.clientHeight < 200;
   if (near) scrollToBottom();
 }
@@ -2284,6 +2381,7 @@ var RAG = (function () {
     buildCorpusSection(inner);
     buildQuerySection(inner);
     buildGraphChatSection(inner);
+    buildGraphViewerSection(inner);
     buildEvalSection(inner);
 
     // 결과 영역
@@ -2365,6 +2463,59 @@ var RAG = (function () {
       gcBusy = false; E.gcSend.disabled = false; E.gcStatus.textContent = '';
       gcHistory.push({ role: 'assistant', content: '⚠ 오류: ' + (e && e.message || e) }); renderGC();
     });
+  }
+
+  // ── 그래프 뷰어 (v51): 실 Neo4j 데이터 다이렉트 시각화 ──
+  var gvView = null, gvMounted = false, gvNodesById = {};
+  function buildGraphViewerSection(inner) {
+    var sec = labSection('그래프 뷰어 (Neo4j 실데이터)');
+    sec.appendChild(el('div', { class: 'lab__sub', style: 'margin:-4px 0 10px', text: '선택한 Neo4j 백엔드의 실제 데이터를 직접 조회해 시각화합니다. 검색어를 넣으면 관련 서브그래프를, 비우면 전체 구조 일부를 표시합니다. 노드 클릭 시 속성을 봅니다.' }));
+    E.gvQuery = el('input', { class: 'field field-mono', placeholder: '검색어(선택) — 비우면 전체 구조 일부' });
+    E.gvLimit = el('input', { class: 'field', type: 'number', value: '80', min: '10', max: '400', style: 'width:96px' });
+    E.gvLoad = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: '그래프 불러오기' });
+    E.gvLoad.addEventListener('click', loadGraphViewer);
+    E.gvStatus = el('div', { style: 'font-size:12px;color:var(--color-text-faint);font-family:var(--font-mono);min-height:16px;margin:6px 0' });
+    sec.appendChild(el('div', { class: 'param-mini' }, [el('label', { text: '검색어' }), E.gvQuery, el('label', { text: '노드수' }), E.gvLimit]));
+    sec.appendChild(el('div', { class: 'lab-btnrow', style: 'margin:6px 0' }, [E.gvLoad]));
+    sec.appendChild(E.gvStatus);
+    E.gvCanvas = el('canvas', { class: 'graph-canvas', style: 'width:100%;height:100%;display:block' });
+    E.gvHolder = el('div', { style: 'position:relative;height:480px;border:1px solid var(--color-border);border-radius:12px;overflow:hidden;background:var(--color-surface)' }, [E.gvCanvas]);
+    sec.appendChild(E.gvHolder);
+    E.gvDetail = el('div', { style: 'margin-top:10px' });
+    sec.appendChild(E.gvDetail);
+    inner.appendChild(sec);
+  }
+  function loadGraphViewer() {
+    var dbId = selectedDbConnId();
+    var dbConn = dbId && L.db && L.db.get ? L.db.get(dbId) : null;
+    if (!dbConn || dbConn.type !== 'neo4j') { toast('검색 백엔드에서 Neo4j 연결을 선택하세요.', 'warn'); return; }
+    E.gvStatus.textContent = '① 스키마 탐색 → ② 그래프 조회 중…'; E.gvLoad.disabled = true;
+    L.rag.graphContext({ query: (E.gvQuery.value || '').trim(), dbConnId: dbId, topK: Math.max(10, Math.min(400, Number(E.gvLimit.value) || 80)) })
+      .then(function (gc) {
+        E.gvLoad.disabled = false;
+        if (!gc.ok) { E.gvStatus.textContent = '실패: ' + gc.error; return; }
+        gvNodesById = {}; (gc.nodes || []).forEach(function (n) { gvNodesById[n.id] = n; });
+        E.gvStatus.textContent = '노드 ' + gc.nodes.length + ' · 엣지 ' + gc.edges.length + ' (server)' + (gc.nodes.length ? '' : ' — 결과 없음(검색어/스키마 확인)');
+        if (window.GraphView && gc.nodes.length) {
+          try {
+            if (!gvMounted) { gvView = window.GraphView; gvView.mount(E.gvCanvas, {}); gvMounted = true; if (gvView.onNodeClick) gvView.onNodeClick(function (n) { showNodeDetail(gvNodesById[n && n.id] || n); }); }
+            gvView.setTheme(state.ui.theme !== 'light');
+            gvView.setData({ nodes: gc.nodes, edges: gc.edges, communities: gc.communities });
+            setTimeout(function () { try { gvView.resize(); gvView.reheat && gvView.reheat(); } catch (e) {} }, 60);
+          } catch (e) { E.gvStatus.textContent = '렌더 실패: ' + e.message; }
+        }
+      }).catch(function (e) { E.gvLoad.disabled = false; E.gvStatus.textContent = '오류: ' + (e && e.message || e); });
+  }
+  function showNodeDetail(n) {
+    if (!E.gvDetail || !n) return;
+    E.gvDetail.innerHTML = '';
+    var box = el('div', { style: 'padding:12px 14px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface-2)' });
+    box.appendChild(el('div', { style: 'font-weight:600;margin-bottom:6px', text: (n.label || n.id) + '   [' + (n.type || 'node') + ']' }));
+    var props = n.props || {};
+    var keys = Object.keys(props);
+    if (keys.length) { var pl = el('div', { class: 'mono', style: 'font-size:12px;color:var(--color-text-muted);white-space:pre-wrap;max-height:200px;overflow:auto' }); keys.slice(0, 40).forEach(function (k) { pl.appendChild(el('div', { text: k + ': ' + String(props[k]).slice(0, 160) })); }); box.appendChild(pl); }
+    else box.appendChild(el('div', { style: 'font-size:12px;color:var(--color-text-faint)', text: '표시할 속성 없음' }));
+    E.gvDetail.appendChild(box);
   }
 
   function buildCorpusSection(inner) {

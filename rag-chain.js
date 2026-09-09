@@ -1192,6 +1192,32 @@ function _formatSubgraph(nodes, edges) {
   return '엔티티(' + nodes.length + '개):\n' + (ent || '(없음)') + '\n\n관계(' + edges.length + '개):\n' + (rel || '(없음)');
 }
 
+// 검색만: 스키마 + 질문관련 서브그래프 + 컨텍스트(LLM 호출 없음). Chat RAG·그래프뷰어 공용.
+// opts.cypher 를 주면 그 Cypher를 직접 실행(뷰어 커스텀 질의).
+async function graphContext(opts) {
+  opts = opts || {};
+  var dbConn = (opts.dbConnId && L.db && typeof L.db.get === 'function') ? L.db.get(opts.dbConnId) : null;
+  if (!dbConn || dbConn.type !== 'neo4j') return { ok: false, error: 'Neo4j 연결이 아닙니다.' };
+  var onStage = typeof opts.onStage === 'function' ? opts.onStage : function () {};
+  onStage({ stage: 'schema' });
+  var schema = await graphDiscoverSchema(dbConn, opts.signal, opts.refreshSchema);
+  if (schema && !schema.ok) return { ok: false, error: 'Neo4j 스키마 탐색 실패: ' + (schema.error || '') + ' (자격증명/DB 확인)', schema: schema };
+  onStage({ stage: 'retrieve', schema: schema });
+  var ret;
+  if (opts.cypher) {
+    var gqc = await L.db.graphQuery({ connId: dbConn.id, readonly: true, cypher: opts.cypher, params: opts.params || {}, signal: opts.signal });
+    ret = { gq: gqc, cypher: opts.cypher, terms: [] };
+  } else {
+    ret = await graphRetrieveSubgraph(dbConn, opts.query, schema, opts.topK || 60, opts.signal);
+  }
+  var gq = ret.gq;
+  if (!gq || !gq.ok || gq.provider !== 'server') return { ok: false, error: (gq && gq.error) || 'Neo4j 검색 실패', schema: schema, cypher: ret.cypher };
+  var nodes = gq.nodes || [], edges = gq.edges || [];
+  onStage({ stage: 'context', nodes: nodes.length, edges: edges.length });
+  return { ok: true, contextText: _formatSubgraph(nodes, edges), nodes: nodes, edges: edges, communities: gq.communities || [],
+    cypher: ret.cypher, schema: schema, entities: nodes.slice(0, 25), terms: ret.terms || [], stats: { nodes: nodes.length, edges: edges.length } };
+}
+
 // 대화형 GraphRAG: 질문 → 스키마 → 서브그래프 → LLM 답변
 async function graphChat(opts) {
   opts = opts || {};
@@ -1248,6 +1274,7 @@ L.rag = {
   buildGraph: buildGraph,
   // 채팅형 GraphRAG (§7.5) — additive
   graphChat: graphChat,
+  graphContext: graphContext,
   graphDiscoverSchema: graphDiscoverSchema,
   graphRetrieveSubgraph: graphRetrieveSubgraph,
   // 임베딩 시각화 도구 (§Embeddings Explorer) — additive

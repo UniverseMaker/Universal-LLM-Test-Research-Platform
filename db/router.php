@@ -535,8 +535,10 @@ function neo4j_to_graph($r, $profile) {
                 'id'      => $id,
                 'label'   => isset($props[$nameProp]) ? $props[$nameProp] : (isset($labels[0]) ? $labels[0] : $id),
                 'type'    => isset($labels[0]) ? strtolower($labels[0]) : 'node',
+                'labels'  => $labels,
                 'community' => isset($props['community']) ? $props['community'] : null,
                 'summary' => isset($props[$summaryProp]) ? $props[$summaryProp] : null,
+                'props'   => $props,
             );
             $nodes[] = $node;
             if ($isCommunity) {

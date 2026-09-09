@@ -252,6 +252,11 @@
                 <textarea id="chatInput" class="composer__input" rows="1"
                   placeholder="메시지를 입력하세요…  (Enter 전송 · Shift+Enter 줄바꿈)" aria-label="메시지 입력"></textarea>
                 <div class="composer__actions">
+                  <label class="reason-toggle" title="RAG 검색으로 답변 보강 (근거 표시)">
+                    <input type="checkbox" id="ragToggle" />
+                    <span>RAG</span>
+                  </label>
+                  <select id="ragChatSource" class="rag-src-select" hidden aria-label="RAG 소스"></select>
                   <label class="reason-toggle" title="reasoning 표시">
                     <input type="checkbox" id="reasonToggle" checked />
                     <span>reasoning</span>
