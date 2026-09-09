@@ -1146,11 +1146,26 @@ async function graphDiscoverSchema(dbConn, signal, force) {
   return schema;
 }
 
+// 흔한 한국어 조사 제거(간단 휴리스틱) — "충남대학교에"→"충남대학교"
+function _stemKo(w) {
+  var p2 = ['에서', '에게', '으로', '부터', '까지', '보다', '처럼', '이나', '한테', '께서', '라고', '이라'];
+  var p1 = ['은', '는', '이', '가', '을', '를', '의', '에', '도', '만', '과', '와', '로', '랑', '나', '고'];
+  for (var i = 0; i < p2.length; i++) { if (w.length > p2[i].length + 1 && w.slice(-2) === p2[i]) return w.slice(0, -2); }
+  for (var j = 0; j < p1.length; j++) { if (w.length > 2 && w.slice(-1) === p1[j]) return w.slice(0, -1); }
+  return w;
+}
 function _graphTerms(q) {
-  var stop = { '은': 1, '는': 1, '이': 1, '가': 1, '을': 1, '를': 1, '의': 1, '에': 1, '에서': 1, '와': 1, '과': 1, '도': 1, '만': 1, 'the': 1, 'a': 1, 'an': 1, 'is': 1, 'of': 1, 'in': 1, 'to': 1 };
-  return String(q || '').replace(/[?!.,·]/g, ' ').split(/\s+/)
+  var stop = { '은': 1, '는': 1, '이': 1, '가': 1, '을': 1, '를': 1, '의': 1, '에': 1, '에서': 1, '와': 1, '과': 1, '도': 1, '만': 1,
+    '대해': 1, '대한': 1, '관련': 1, '알려줘': 1, '알려': 1, '뭐야': 1, '무엇': 1, '어디': 1, '누구': 1, '어떤': 1, '있어': 1, '있나': 1, '몇': 1, '개니': 1,
+    'the': 1, 'a': 1, 'an': 1, 'is': 1, 'of': 1, 'in': 1, 'to': 1, 'about': 1, 'what': 1, 'which': 1, 'who': 1, 'how': 1 };
+  var raw = String(q || '').replace(/[?!.,·"'()\[\]{}]/g, ' ').split(/\s+/)
     .map(function (w) { return w.trim(); })
     .filter(function (w) { return w.length >= 2 && !stop[w.toLowerCase()]; });
+  var out = [], seen = {};
+  raw.forEach(function (w) {
+    [w, _stemKo(w)].forEach(function (t) { t = String(t).toLowerCase(); if (t.length >= 2 && !stop[t] && !seen[t]) { seen[t] = 1; out.push(t); } });
+  });
+  return out;
 }
 
 // 질문 관련 서브그래프 검색 Cypher 구성(풀텍스트 인덱스 우선 → 이름속성 CONTAINS → 전체구조 폴백)
@@ -1158,20 +1173,20 @@ async function graphRetrieveSubgraph(dbConn, query, schema, k, signal) {
   k = k || 60;
   var seed = Math.min(20, k);
   var terms = _graphTerms(query);
-  var term = terms.slice(0, 4).join(' ');
   var cypher, params;
-  if (schema && schema.fulltext && schema.fulltext.length && term) {
+  if (schema && schema.fulltext && schema.fulltext.length && terms.length) {
     var idx = schema.fulltext[0].name;
-    var luceneQ = terms.slice(0, 6).map(function (t) { return t.replace(/[^\wㄱ-힣]/g, '') + '*'; }).filter(function (t) { return t.length > 1; }).join(' OR ');
+    var luceneQ = terms.slice(0, 8).map(function (t) { return t.replace(/[^\wㄱ-힣]/g, '') + '*'; }).filter(function (t) { return t.length > 1; }).join(' OR ');
     cypher = 'CALL db.index.fulltext.queryNodes($idx, $q) YIELD node, score '
            + 'WITH node ORDER BY score DESC LIMIT $seed '
            + 'OPTIONAL MATCH (node)-[r]-(m) RETURN node AS n, r, m LIMIT $k';
-    params = { idx: idx, q: luceneQ || (term + '*'), seed: seed, k: k };
-  } else if (term && schema && schema.nameProps && schema.nameProps.length) {
+    params = { idx: idx, q: luceneQ || (terms[0] + '*'), seed: seed, k: k };
+  } else if (terms.length && schema && schema.nameProps && schema.nameProps.length) {
     var props = schema.nameProps.slice(0, 6).map(function (p) { return String(p).replace(/`/g, ''); });
-    var whereParts = props.map(function (p) { return 'toLower(toString(n.`' + p + '`)) CONTAINS toLower($term)'; }).join(' OR ');
+    // 각 이름속성이 terms 중 하나라도(부분문자열) 포함하면 매치 — 키워드 개별 OR
+    var whereParts = props.map(function (p) { return 'any(t IN $terms WHERE toLower(toString(coalesce(n.`' + p + '`, ""))) CONTAINS t)'; }).join(' OR ');
     cypher = 'MATCH (n) WHERE ' + whereParts + ' WITH n LIMIT $seed OPTIONAL MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $k';
-    params = { term: term, seed: seed, k: k };
+    params = { terms: terms.slice(0, 8), seed: seed, k: k };
   } else {
     cypher = 'MATCH (n)-[r]->(m) RETURN n, r, m LIMIT $k';
     params = { k: k };
